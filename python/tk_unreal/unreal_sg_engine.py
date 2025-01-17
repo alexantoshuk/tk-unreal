@@ -18,6 +18,11 @@ else:
     UESGEngine = unreal.ShotgunEngine
 
 
+def get_selected_actors():
+    actor_system = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+    return actor_system.get_selected_level_actors()
+
+
 @unreal.uclass()
 class ShotgunEngineWrapper(UESGEngine):
 
@@ -408,13 +413,18 @@ class ShotgunEngineWrapper(UESGEngine):
             has_selected_actors = len(self.selected_actors) > 0
         has_selection = len(self.selected_assets) > 0 or has_selected_actors
 
+        if not has_selection:
+            selected_actors = get_selected_actors()
+            unreal.log(selected_actors)
+            has_selection = len(selected_actors) > 0
+
         for app_name in sorted(commands_by_app.keys()):
             # Exclude the Publish app if it doesn't have any context
             if app_name == "Publish" and not has_selection:
                 continue
 
             if len(commands_by_app[app_name]) > 1:
-                # more than one menu entry fort his app
+                # more than one menu entry for this app
                 # make a menu section and put all items in that menu section
                 self._add_menu_item(menu_items, "context_begin", app_name, app_name)
 
@@ -435,6 +445,7 @@ class AppCommand(object):
     """
     Wraps around a single command that you get from engine.commands
     """
+
     def __init__(self, name, command_dict):
         """
         Initialize AppCommand object.

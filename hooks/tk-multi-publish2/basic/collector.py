@@ -18,6 +18,47 @@ SequenceEdit = namedtuple("SequenceEdit", ["sequence", "track", "section"])
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
+def ctx_from_actor_sequence(seq):
+    seq_name = seq.get_name()
+    seq_name = seq_name.rstrip('_sub')
+    l = seq_name.split('_')
+    if len(l) != 3:
+        return None
+    scene, code, step = l
+    code = '_'.join((scene, code))
+    return scene, code, step
+
+
+def ctx_from_actor_level(level):
+    path = level.get_path_name()
+    try:
+        scene, code, step = path.split('/')[3:6]
+        return scene, code, step
+    except:
+        return None
+
+
+def find_actor_sequence_binding(seq, actor_name):
+    def walk(seq):
+        # b = seq.find_binding_by_name(actor_name)
+        # if b:
+        #     return (seq, b)
+        for b in seq.get_bindings():
+            # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
+            if b.get_name() == actor_name:
+                return (seq, b)
+
+        for track in seq.get_tracks():
+            for section in track.get_sections():
+                try:
+                    res = walk(section.get_sequence())
+                    if res:
+                        return res
+                except:
+                    pass
+    return walk(seq)
+
+
 class UnrealSessionCollector(HookBaseClass):
     """
     Collector that operates on the Unreal session. Should inherit from the basic
@@ -83,6 +124,7 @@ class UnrealSessionCollector(HookBaseClass):
 
         # Collect assets selected in Unreal
         self.collect_selected_assets(parent_item)
+        self.collect_selected_actors(parent_item)
 
     def collect_current_session(self, settings, parent_item):
         """
@@ -160,6 +202,72 @@ class UnrealSessionCollector(HookBaseClass):
         asset_item.properties["asset_name"] = asset_name
         asset_item.properties["asset_type"] = asset_type
         return asset_item
+
+    def create_actor_item(self, parent_item, actor, actor_type, anim, actor_name, display_name=None):
+        """
+        Create an unreal item under the given parent item.
+
+        :param actor_path: The unreal actor path, as a string.
+        :param actor_type: The unreal actor type, as a string.
+        :param actor_name: The unreal actor name, as a string.
+        :param display_name: Optional display name for the item.
+        :returns: The created item.
+        """
+        item_type = "unreal.actor.%s" % actor_type
+        actor_item = parent_item.create_item(
+            item_type,  # Include the asset type for the publish plugin to use
+            actor_type,  # Display type
+            display_name or actor_name,  # Display name of item instance
+        )
+        ctx = None
+        if anim:
+            seq, _ = anim
+            ctx = ctx_from_actor_sequence(seq)
+        else:
+            lvl = actor.get_level()
+            ctx = ctx_from_actor_level(lvl)
+
+        # Set asset properties which can be used by publish plugins
+        actor_item.properties["actor"] = actor
+        actor_item.properties["actor_name"] = actor_name
+        actor_item.properties["actor_type"] = actor_type
+        actor_item.properties["anim"] = anim
+        actor_item.properties["ctx"] = ctx
+        return actor_item
+
+    def collect_selected_actors(self, parent_item):
+        """
+        Creates items for assets selected in Unreal.
+        ["/Script/CinematicCamera.CineCameraActor'/Game/scenes/SCN/SCN_010/SCN_010_masterlevel.SCN_010_masterlevel:PersistentLevel.SCN_010_CAM_0'"]
+
+        :param parent_item: Parent Item instance
+        """
+
+        actor_system = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
+        selected_actors = actor_system.get_selected_level_actors()
+
+        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        if unreal_sg.selected_assets:
+            return
+        # Iterate through the selected assets and get their info and add them as items to be published
+        active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
+        for actor in selected_actors:
+            display_name = actor_name = actor.get_actor_label()
+            anim = find_actor_sequence_binding(active_level_sequence, actor_name)
+            if anim:
+                seq, binding = anim
+                display_name = f"{actor_name}\n({seq.get_name()})"
+
+            self.create_actor_item(
+                parent_item,
+                # :class:`Name` instances, we cast them to strings otherwise
+                # string operations fail down the line..
+                actor,
+                "%s" % actor.get_class().get_name(),
+                anim,
+                "%s" % actor_name,
+                display_name,
+            )
 
     def collect_selected_assets(self, parent_item):
         """
