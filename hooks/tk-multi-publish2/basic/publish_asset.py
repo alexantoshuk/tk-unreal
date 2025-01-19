@@ -374,7 +374,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         item.properties["destination_path"] = destination_path
 
         # Set the Published File Type
-        item.properties["publish_type"] = "Unreal FBX"
+        item.properties["publish_type"] = "FBX"
 
         # run the base class validation
         # return super(UnrealAssetPublishPlugin, self).validate(settings, item)

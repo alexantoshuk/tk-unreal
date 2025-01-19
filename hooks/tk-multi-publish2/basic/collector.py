@@ -38,6 +38,26 @@ def ctx_from_actor_level(level):
         return None
 
 
+def create_context(parent_context, scene, shot):
+    engine = sgtk.platform.current_engine()
+    engine.sgtk.synchronize_filesystem_structure()
+
+    root = engine.context.filesystem_locations[0]
+    path = os.path.join(root, "scenes", scene, shot, "UE")
+    context = engine.sgtk.context_from_path(path)
+    d = context.to_dict()
+    task_data = engine.shotgun.find_one("Task", [
+        ["step", "is", d["step"]],
+        ["entity", "is", d["entity"]],
+    ], ["name", "content"])
+    task_data.setdefault('name', task_data['content'])
+
+    d['task'] = task_data
+    d['source_entity'] = parent_context.source_entity
+    context = sgtk.Context.from_dict(engine.sgtk, d)
+    return context
+
+
 def find_actor_sequence_binding(seq, actor_name):
     def walk(seq):
         # b = seq.find_binding_by_name(actor_name)
@@ -153,7 +173,8 @@ class UnrealSessionCollector(HookBaseClass):
         session_item.set_icon_from_path(icon_path)
 
         # Set the project root
-        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        engine = sgtk.platform.current_engine()
+        unreal_sg = engine.unreal_sg_engine
         project_root = unreal_sg.get_shotgun_work_dir()
 
         # Important to convert "/" in path returned by Unreal to "\" for templates to work
@@ -213,12 +234,7 @@ class UnrealSessionCollector(HookBaseClass):
         :param display_name: Optional display name for the item.
         :returns: The created item.
         """
-        item_type = "unreal.actor.%s" % actor_type
-        actor_item = parent_item.create_item(
-            item_type,  # Include the asset type for the publish plugin to use
-            actor_type,  # Display type
-            display_name or actor_name,  # Display name of item instance
-        )
+
         ctx = None
         if anim:
             seq, _ = anim
@@ -227,12 +243,28 @@ class UnrealSessionCollector(HookBaseClass):
             lvl = actor.get_level()
             ctx = ctx_from_actor_level(lvl)
 
+        item_type = "unreal.actor.%s" % actor_type
+        actor_item = parent_item.create_item(
+            item_type,  # Include the asset type for the publish plugin to use
+            actor_type,  # Display type
+            display_name or actor_name,  # Display name of item instance
+        )
+        # unreal.log(f"PARENT CONTEXT: {parent_item.context} {parent_item.context.to_dict()} ")
+        # unreal.log(f"CURRENT CONTEXT: {actor_item.context} {actor_item.context.to_dict()} ")
+
+        if ctx:
+            scene, shot, step = ctx
+            context = create_context(actor_item.context, scene, shot)
+            # unreal.log(f"CONTEXT: {context} {context.to_dict()} ")
+            actor_item.properties["context"] = context
+        actor_item.properties["ctx"] = ctx
+
         # Set asset properties which can be used by publish plugins
         actor_item.properties["actor"] = actor
         actor_item.properties["actor_name"] = actor_name
         actor_item.properties["actor_type"] = actor_type
         actor_item.properties["anim"] = anim
-        actor_item.properties["ctx"] = ctx
+        # actor_item.properties["ctx"] = ctx
         return actor_item
 
     def collect_selected_actors(self, parent_item):

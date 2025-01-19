@@ -245,7 +245,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         fw = self.load_framework("tk-framework-shotgunutils_v5.x.x")
         module = fw.import_module("settings")
         settings_manager = module.UserSettings(self.parent)
-
+        # unreal.log(f"SAVE UI: {settings_manager} {dir(settings_manager)} ")
         # Save settings
         publish_folder = settings["Publish Folder"].value
         settings_manager.store("publish2.publish_folder", publish_folder, settings_manager.SCOPE_PROJECT)
@@ -279,6 +279,8 @@ class UnrealActorPublishPlugin(HookBaseClass):
         accepted = True
         publisher = self.parent
 
+        item.context = item.properties["context"]
+
         # ensure the publish template is defined
         publish_template_setting = settings.get("Publish Template")
         publish_template = publisher.get_template_by_name(publish_template_setting.value)
@@ -292,8 +294,8 @@ class UnrealActorPublishPlugin(HookBaseClass):
         # we've validated the work and publish templates. add them to the item properties
         # for use in subsequent methods
         item.properties["publish_template"] = publish_template
-
         self.load_saved_ui_settings(settings)
+
         return {
             "accepted": accepted,
             "checked": True
@@ -327,7 +329,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         #             }
         #         }
         #     )
-
+        # unreal.log(f"CONTEXT: {item.context} {item.context.to_dict()} ")
         actor = item.properties.get("actor")
         actor_name = item.properties.get("actor_name")
         if not actor or not actor_name:
@@ -349,7 +351,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
             scene, shot, step = ctx
             fields['Sequence'] = scene
             fields['Shot'] = shot
-            fields['Step'] = step
+            fields['Step'] = "UE"
 
         # Stash the Unrea asset path and name in properties
         item.properties["actor"] = actor
@@ -380,7 +382,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         item.properties["destination_path"] = destination_path
 
         # Set the Published File Type
-        item.properties["publish_type"] = "Unreal FBX"
+        item.properties["publish_type"] = "FBX"
 
         # run the base class validation
         # return super(UnrealActorPublishPlugin, self).validate(settings, item)
