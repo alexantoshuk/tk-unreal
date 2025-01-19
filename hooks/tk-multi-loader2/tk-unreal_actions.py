@@ -62,8 +62,13 @@ class UnrealActions(HookBaseClass):
 
         action_instances = []
 
-        if "import_content" in actions:
-            action_instances.append({"name": "import_content",
+        if "import_fbx" in actions:
+            action_instances.append({"name": "import_fbx",
+                                     "params": None,
+                                     "caption": "Import into Content Browser",
+                                     "description": "This will import the asset into the Unreal Editor Content Browser."})
+        if "import_alembic" in actions:
+            action_instances.append({"name": "import_alembic",
                                      "params": None,
                                      "caption": "Import into Content Browser",
                                      "description": "This will import the asset into the Unreal Editor Content Browser."})
@@ -118,8 +123,8 @@ class UnrealActions(HookBaseClass):
         # resolve path
         path = self.get_publish_path(sg_publish_data)
 
-        if name == "import_content":
-            self._import_to_content_browser(path, sg_publish_data)
+        if name in ("import_fbx", "import_alembic"):
+            self._import_to_content_browser(path, sg_publish_data, name)
         else:
             try:
                 HookBaseClass.execute_action(self, name, params, sg_publish_data)
@@ -127,7 +132,7 @@ class UnrealActions(HookBaseClass):
                 # base class doesn't have the method, so ignore and continue
                 pass
 
-    def _import_to_content_browser(self, path, sg_publish_data):
+    def _import_to_content_browser(self, path, sg_publish_data, action_name):
         """
         Import the asset into the Unreal Content Browser.
 
@@ -142,7 +147,12 @@ class UnrealActions(HookBaseClass):
 
         destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
 
-        asset_path = _unreal_import_fbx_asset(path, destination_path, destination_name)
+        if action_name == "import_fbx":
+            asset_path = _unreal_import_fbx_asset(path, destination_path, destination_name)
+        elif action_name == "import_alembic":
+            asset_path = _unreal_import_alembic_asset(path, destination_path, destination_name)
+        else:
+            asset_path = None
 
         if asset_path:
             self._set_asset_metadata(asset_path, sg_publish_data)
@@ -283,6 +293,31 @@ def _sanitize_name(name):
     return name_no_version.replace('.', '_')
 
 
+def _unreal_import_alembic_asset(input_path, destination_path, destination_name):
+    """
+    Import an ABC into Unreal Content Browser
+
+    :param input_path: The alembic file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :param destination_name: The asset name to use; if None, will use the filename without extension
+    """
+    tasks = []
+    tasks.append(_generate_alembic_import_task(input_path, destination_path, destination_name))
+
+    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
+
+    first_imported_object = None
+
+    for task in tasks:
+        unreal.log("Import Task for: {}".format(task.filename))
+        for object_path in task.imported_object_paths:
+            unreal.log("Imported object: {}".format(object_path))
+            if not first_imported_object:
+                first_imported_object = object_path
+
+    return first_imported_object
+
+
 def _unreal_import_fbx_asset(input_path, destination_path, destination_name):
     """
     Import an FBX into Unreal Content Browser
@@ -347,5 +382,49 @@ def _generate_fbx_import_task(
     task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
     if as_skeletal:
         task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_SKELETAL_MESH
+
+    return task
+
+
+def _generate_alembic_import_task(
+    filename,
+    destination_path,
+    destination_name=None,
+    replace_existing=True,
+    automated=True,
+    save=True,
+):
+    """
+    Create and configure an Unreal AssetImportTask
+
+    :param filename: The fbx file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :return the configured AssetImportTask
+    """
+
+    task = unreal.AssetImportTask()
+    task.filename = filename
+    task.destination_path = destination_path
+
+    # By default, destination_name is the filename without the extension
+    if destination_name is not None:
+        task.destination_name = destination_name
+
+    task.replace_existing = replace_existing
+    task.automated = automated
+    task.save = save
+    task.async_ = True
+
+    alembic_settings = unreal.AbcImportSettings()
+    if True:  # is Houdini? FIX to automatic determine this
+        # Assign the Alembic settings to the import task
+        # Customize Alembic import settings here if needed
+        alembic_settings.conversion_settings = unreal.AbcConversionSettings(
+            scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
+            rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
+        )
+
+    alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
+    task.options = alembic_settings
 
     return task
