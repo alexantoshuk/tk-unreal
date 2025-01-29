@@ -5,10 +5,16 @@
 from collections import namedtuple, defaultdict
 import copy
 import os
+import sys
 
 import unreal
 
 import sgtk
+
+from pathlib import Path
+libs_path = os.path.join(str(Path(__file__).parents[3]), 'libs')
+sys.path.insert(0, libs_path)
+import unreal_utils
 
 # A named tuple to store LevelSequence edits: the sequence/track/section
 # the edit is in.
@@ -16,67 +22,6 @@ SequenceEdit = namedtuple("SequenceEdit", ["sequence", "track", "section"])
 
 
 HookBaseClass = sgtk.get_hook_baseclass()
-
-
-def ctx_from_actor_sequence(seq):
-    seq_name = seq.get_name()
-    seq_name = seq_name.rstrip('_sub')
-    l = seq_name.split('_')
-    if len(l) != 3:
-        return None
-    scene, code, step = l
-    code = '_'.join((scene, code))
-    return scene, code, step
-
-
-def ctx_from_actor_level(level):
-    path = level.get_path_name()
-    try:
-        scene, code, step = path.split('/')[3:6]
-        return scene, code, step
-    except:
-        return None
-
-
-def create_context(parent_context, scene, shot):
-    engine = sgtk.platform.current_engine()
-    engine.sgtk.synchronize_filesystem_structure()
-
-    root = engine.context.filesystem_locations[0]
-    path = os.path.join(root, "scenes", scene, shot, "UE")
-    context = engine.sgtk.context_from_path(path)
-    d = context.to_dict()
-    task_data = engine.shotgun.find_one("Task", [
-        ["step", "is", d["step"]],
-        ["entity", "is", d["entity"]],
-    ], ["name", "content"])
-    task_data.setdefault('name', task_data['content'])
-
-    d['task'] = task_data
-    d['source_entity'] = parent_context.source_entity
-    context = sgtk.Context.from_dict(engine.sgtk, d)
-    return context
-
-
-def find_actor_sequence_binding(seq, actor_name):
-    def walk(seq):
-        # b = seq.find_binding_by_name(actor_name)
-        # if b:
-        #     return (seq, b)
-        for b in seq.get_bindings():
-            # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
-            if b.get_name() == actor_name:
-                return (seq, b)
-
-        for track in seq.get_tracks():
-            for section in track.get_sections():
-                try:
-                    res = walk(section.get_sequence())
-                    if res:
-                        return res
-                except:
-                    pass
-    return walk(seq)
 
 
 class UnrealSessionCollector(HookBaseClass):
@@ -175,7 +120,7 @@ class UnrealSessionCollector(HookBaseClass):
         # Set the project root
         engine = sgtk.platform.current_engine()
         unreal_sg = engine.unreal_sg_engine
-        project_root = unreal_sg.get_shotgun_work_dir()
+        project_root = unreal_sg.get_shotgrid_work_dir()
 
         # Important to convert "/" in path returned by Unreal to "\" for templates to work
         project_root = project_root.replace("/", "\\")
@@ -218,6 +163,19 @@ class UnrealSessionCollector(HookBaseClass):
             display_name or asset_name,  # Display name of item instance
         )
 
+        ctx = unreal_utils.ctx_from_asset_path(asset_path)
+        if ctx:
+            _type, code, step = ctx
+            try:
+                context = unreal_utils.create_asset_context(asset_item.context, _type, code, step)
+            except:
+                self.logger.error(f"Can't find task with step '{step}' for asset '{code}'")
+            unreal.log(f"Get SG Context from asset path: {context} {context.to_dict()} ")
+            asset_item.properties["context"] = context
+        else:
+            asset_item.properties["context"] = asset_item.context
+
+        asset_item.properties["ctx"] = ctx
         # Set asset properties which can be used by publish plugins
         asset_item.properties["asset_path"] = asset_path
         asset_item.properties["asset_name"] = asset_name
@@ -235,28 +193,31 @@ class UnrealSessionCollector(HookBaseClass):
         :returns: The created item.
         """
 
-        ctx = None
-        if anim:
-            seq, _ = anim
-            ctx = ctx_from_actor_sequence(seq)
-        else:
-            lvl = actor.get_level()
-            ctx = ctx_from_actor_level(lvl)
-
         item_type = "unreal.actor.%s" % actor_type
         actor_item = parent_item.create_item(
             item_type,  # Include the asset type for the publish plugin to use
             actor_type,  # Display type
             display_name or actor_name,  # Display name of item instance
         )
-        # unreal.log(f"PARENT CONTEXT: {parent_item.context} {parent_item.context.to_dict()} ")
-        # unreal.log(f"CURRENT CONTEXT: {actor_item.context} {actor_item.context.to_dict()} ")
+
+        ctx = None
+        if anim:
+            seq, _ = anim
+            ctx = unreal_utils.ctx_from_actor_sequence(seq)
+        else:
+            lvl = actor.get_level()
+            ctx = unreal_utils.ctx_from_actor_level(lvl)
 
         if ctx:
             scene, shot, step = ctx
-            context = create_context(actor_item.context, scene, shot)
-            # unreal.log(f"CONTEXT: {context} {context.to_dict()} ")
+            try:
+                context = unreal_utils.create_shot_context(actor_item.context, scene, shot, step)
+            except:
+                self.logger.error(f"Can't find task with step '{step}' for shot '{shot}'")
+            unreal.log(f"Get SG Context from level/sequence name: {context} {context.to_dict()} ")
             actor_item.properties["context"] = context
+        else:
+            actor_item.properties["context"] = actor_item.context
         actor_item.properties["ctx"] = ctx
 
         # Set asset properties which can be used by publish plugins
@@ -270,7 +231,6 @@ class UnrealSessionCollector(HookBaseClass):
     def collect_selected_actors(self, parent_item):
         """
         Creates items for assets selected in Unreal.
-        ["/Script/CinematicCamera.CineCameraActor'/Game/scenes/SCN/SCN_010/SCN_010_masterlevel.SCN_010_masterlevel:PersistentLevel.SCN_010_CAM_0'"]
 
         :param parent_item: Parent Item instance
         """
@@ -285,7 +245,7 @@ class UnrealSessionCollector(HookBaseClass):
         active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
         for actor in selected_actors:
             display_name = actor_name = actor.get_actor_label()
-            anim = find_actor_sequence_binding(active_level_sequence, actor_name)
+            anim = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
             if anim:
                 seq, binding = anim
                 display_name = f"{actor_name}\n({seq.get_name()})"

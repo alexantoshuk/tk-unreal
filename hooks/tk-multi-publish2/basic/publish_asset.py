@@ -279,6 +279,8 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         accepted = True
         publisher = self.parent
 
+        item.context = item.properties["context"]
+
         # ensure the publish template is defined
         publish_template_setting = settings.get("Publish Template")
         publish_template = publisher.get_template_by_name(publish_template_setting.value)
@@ -344,6 +346,12 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         fields["YYYY"] = date.year
         fields["MM"] = date.month
         fields["DD"] = date.day
+        ctx = item.properties["ctx"]
+        if ctx:
+            _type, code, step = ctx
+            fields['sg_asset_type'] = _type
+            fields['Asset'] = code
+            fields['Step'] = step
 
         # Stash the Unrea asset path and name in properties
         item.properties["asset_path"] = asset_path

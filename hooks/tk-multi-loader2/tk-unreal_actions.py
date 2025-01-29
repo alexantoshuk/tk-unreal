@@ -7,11 +7,17 @@ Hook that loads defines all the available actions, broken down by publish type.
 """
 
 import os
+import sys
 import sgtk
 import unreal
 import re
 
 HookBaseClass = sgtk.get_hook_baseclass()
+
+from pathlib import Path
+libs_path = os.path.join(str(Path(__file__).parents[2]), 'libs')
+sys.path.insert(0, libs_path)
+import unreal_utils
 
 
 class UnrealActions(HookBaseClass):
@@ -62,6 +68,11 @@ class UnrealActions(HookBaseClass):
 
         action_instances = []
 
+        if "import_fbx_camera" in actions:
+            action_instances.append({"name": "import_fbx_camera",
+                                     "params": None,
+                                     "caption": "Import Camera Actor",
+                                     "description": "This will import camera actor with animation track."})
         if "import_fbx" in actions:
             action_instances.append({"name": "import_fbx",
                                      "params": None,
@@ -71,7 +82,13 @@ class UnrealActions(HookBaseClass):
             action_instances.append({"name": "import_alembic",
                                      "params": None,
                                      "caption": "Import into Content Browser",
-                                     "description": "This will import the asset into the Unreal Editor Content Browser."})
+                                     "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
+
+        # if "import_alembic_camera" in actions:
+        #     action_instances.append({"name": "import_alembic_camera",
+        #                              "params": None,
+        #                              "caption": "Import Camera into Content Browser",
+        #                              "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
 
         return action_instances
 
@@ -123,7 +140,7 @@ class UnrealActions(HookBaseClass):
         # resolve path
         path = self.get_publish_path(sg_publish_data)
 
-        if name in ("import_fbx", "import_alembic"):
+        if name in ("import_fbx_camera", "import_fbx", "import_alembic", "import_alembic_camera"):
             self._import_to_content_browser(path, sg_publish_data, name)
         else:
             try:
@@ -145,12 +162,21 @@ class UnrealActions(HookBaseClass):
         if not os.path.exists(path):
             raise Exception("File not found on disk - '%s'" % path)
 
-        destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
-
         if action_name == "import_fbx":
-            asset_path = _unreal_import_fbx_asset(path, destination_path, destination_name)
+            destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
+            asset_path = unreal_utils.unreal_import_fbx_asset(path, destination_path, destination_name, automated=False)
+
         elif action_name == "import_alembic":
-            asset_path = _unreal_import_alembic_asset(path, destination_path, destination_name)
+            destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
+            asset_path = unreal_utils.unreal_import_alembic_asset(path, destination_path, destination_name)
+
+        elif action_name == "import_fbx_camera":
+            destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
+            asset_path = unreal_utils.unreal_import_fbx_camera(path, destination_path, destination_name)
+
+        elif action_name == "import_alembic_camera":
+            destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
+            asset_path = unreal_utils.unreal_import_alembic_camera(path, destination_path, destination_name)
         else:
             asset_path = None
 
@@ -218,6 +244,60 @@ class UnrealActions(HookBaseClass):
     ##############################################################################################################
     # helper methods which can be subclassed in custom hooks to fine tune the behaviour of things
 
+    def _get_destination_camera_path_and_name(self, sg_publish_data):
+        """
+        Get the destination path and name from the publish data and the templates
+
+        :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
+        :return destination_path that matches a template and destination_name from asset or published file
+        """
+
+        # Get the name field from the Publish Data
+        name = sg_publish_data["name"]
+        name = os.path.splitext(name)[0]
+
+        # Get the publish context to determine the template to use
+        context = self.sgtk.context_from_entity_dictionary(sg_publish_data)
+
+        # Get the destination templates based on the context
+        # Assets and Shots supported by default
+        # Other entities fall back to Project
+        if context.entity["type"] == "Shot":
+            destination_template = self.sgtk.templates["unreal_loader_shot_path"]
+            destination_name_template = self.sgtk.templates["unreal_loader_shot_name"]
+        else:
+            raise Exception("Can't determine context for loading camera '{name}'")
+
+        task_id = sg_publish_data['task']['id']
+        step_short_name = unreal_utils.step_short_name(task_id)
+        # For camera step is always 'LAY'
+        step_short_name = 'LAY'
+
+        # Query the fields needed for the destination template from the context
+        fields = context.as_template_fields(destination_template)
+
+        # Add the name field from the publish data
+        fields["name"] = name
+        fields["Step"] = step_short_name
+        # Get destination path by applying fields to destination template
+        # Fall back to the root level if unsuccessful
+        destination_path = destination_template.apply_fields(fields)
+
+        # Query the fields needed for the name template from the context
+        name_fields = context.as_template_fields(destination_name_template)
+
+        # Add the name field from the publish data
+        name_fields["name"] = name
+
+        # Get destination name by applying fields to the name template
+        # Fall back to the filename if unsuccessful
+        # try:
+        #     destination_name = destination_name_template.apply_fields(name_fields)
+        # except Exception:
+        #     destination_name = _sanitize_name(sg_publish_data["code"])
+
+        return destination_path, _sanitize_name(name)
+
     def _get_destination_path_and_name(self, sg_publish_data):
         """
         Get the destination path and name from the publish data and the templates
@@ -250,13 +330,16 @@ class UnrealActions(HookBaseClass):
         # Get the name field from the Publish Data
         name = sg_publish_data["name"]
         name = os.path.splitext(name)[0]
+        task_id = sg_publish_data['task']['id']
+        # print("!!!!!!! sg_publish_data >>>>> : ", sg_publish_data)
+        step_short_name = unreal_utils.step_short_name(task_id)
 
         # Query the fields needed for the destination template from the context
         fields = context.as_template_fields(destination_template)
 
         # Add the name field from the publish data
         fields["name"] = name
-
+        fields["Step"] = step_short_name
         # Get destination path by applying fields to destination template
         # Fall back to the root level if unsuccessful
         try:
@@ -272,12 +355,12 @@ class UnrealActions(HookBaseClass):
 
         # Get destination name by applying fields to the name template
         # Fall back to the filename if unsuccessful
-        try:
-            destination_name = destination_name_template.apply_fields(name_fields)
-        except Exception:
-            destination_name = _sanitize_name(sg_publish_data["code"])
+        # try:
+        #     destination_name = destination_name_template.apply_fields(name_fields)
+        # except Exception:
+        #     destination_name = _sanitize_name(sg_publish_data["code"])
 
-        return destination_path, destination_name
+        return destination_path, _sanitize_name(name)
 
 
 """
@@ -291,140 +374,3 @@ def _sanitize_name(name):
 
     # Replace any remaining '.' with '_' since they are not allowed in Unreal asset names
     return name_no_version.replace('.', '_')
-
-
-def _unreal_import_alembic_asset(input_path, destination_path, destination_name):
-    """
-    Import an ABC into Unreal Content Browser
-
-    :param input_path: The alembic file to import
-    :param destination_path: The Content Browser path where the asset will be placed
-    :param destination_name: The asset name to use; if None, will use the filename without extension
-    """
-    tasks = []
-    tasks.append(_generate_alembic_import_task(input_path, destination_path, destination_name))
-
-    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
-
-    first_imported_object = None
-
-    for task in tasks:
-        unreal.log("Import Task for: {}".format(task.filename))
-        for object_path in task.imported_object_paths:
-            unreal.log("Imported object: {}".format(object_path))
-            if not first_imported_object:
-                first_imported_object = object_path
-
-    return first_imported_object
-
-
-def _unreal_import_fbx_asset(input_path, destination_path, destination_name):
-    """
-    Import an FBX into Unreal Content Browser
-
-    :param input_path: The fbx file to import
-    :param destination_path: The Content Browser path where the asset will be placed
-    :param destination_name: The asset name to use; if None, will use the filename without extension
-    """
-    tasks = []
-    tasks.append(_generate_fbx_import_task(input_path, destination_path, destination_name))
-
-    unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
-
-    first_imported_object = None
-
-    for task in tasks:
-        unreal.log("Import Task for: {}".format(task.filename))
-        for object_path in task.imported_object_paths:
-            unreal.log("Imported object: {}".format(object_path))
-            if not first_imported_object:
-                first_imported_object = object_path
-
-    return first_imported_object
-
-
-def _generate_fbx_import_task(
-    filename,
-    destination_path,
-    destination_name=None,
-    replace_existing=True,
-    automated=True,
-    save=True,
-    materials=True,
-    textures=True,
-    as_skeletal=False
-):
-    """
-    Create and configure an Unreal AssetImportTask
-
-    :param filename: The fbx file to import
-    :param destination_path: The Content Browser path where the asset will be placed
-    :return the configured AssetImportTask
-    """
-    task = unreal.AssetImportTask()
-    task.filename = filename
-    task.destination_path = destination_path
-
-    # By default, destination_name is the filename without the extension
-    if destination_name is not None:
-        task.destination_name = destination_name
-
-    task.replace_existing = replace_existing
-    task.automated = automated
-    task.save = save
-
-    task.options = unreal.FbxImportUI()
-    task.options.import_materials = materials
-    task.options.import_textures = textures
-    task.options.import_as_skeletal = as_skeletal
-    # task.options.static_mesh_import_data.combine_meshes = True
-
-    task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_STATIC_MESH
-    if as_skeletal:
-        task.options.mesh_type_to_import = unreal.FBXImportType.FBXIT_SKELETAL_MESH
-
-    return task
-
-
-def _generate_alembic_import_task(
-    filename,
-    destination_path,
-    destination_name=None,
-    replace_existing=True,
-    automated=True,
-    save=True,
-):
-    """
-    Create and configure an Unreal AssetImportTask
-
-    :param filename: The fbx file to import
-    :param destination_path: The Content Browser path where the asset will be placed
-    :return the configured AssetImportTask
-    """
-
-    task = unreal.AssetImportTask()
-    task.filename = filename
-    task.destination_path = destination_path
-
-    # By default, destination_name is the filename without the extension
-    if destination_name is not None:
-        task.destination_name = destination_name
-
-    task.replace_existing = replace_existing
-    task.automated = automated
-    task.save = save
-    task.async_ = True
-
-    alembic_settings = unreal.AbcImportSettings()
-    if True:  # is Houdini? FIX to automatic determine this
-        # Assign the Alembic settings to the import task
-        # Customize Alembic import settings here if needed
-        alembic_settings.conversion_settings = unreal.AbcConversionSettings(
-            scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
-            rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
-        )
-
-    alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
-    task.options = alembic_settings
-
-    return task

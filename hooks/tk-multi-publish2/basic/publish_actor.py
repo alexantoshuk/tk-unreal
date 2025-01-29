@@ -329,7 +329,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         #             }
         #         }
         #     )
-        # unreal.log(f"CONTEXT: {item.context} {item.context.to_dict()} ")
+
         actor = item.properties.get("actor")
         actor_name = item.properties.get("actor_name")
         if not actor or not actor_name:
@@ -351,7 +351,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
             scene, shot, step = ctx
             fields['Sequence'] = scene
             fields['Shot'] = shot
-            fields['Step'] = "UE"
+            fields['Step'] = step
 
         # Stash the Unrea asset path and name in properties
         item.properties["actor"] = actor
@@ -382,7 +382,12 @@ class UnrealActorPublishPlugin(HookBaseClass):
         item.properties["destination_path"] = destination_path
 
         # Set the Published File Type
-        item.properties["publish_type"] = "FBX"
+        publish_type = "FBX"
+        if "camera" in actor_name.lower():
+            publish_type = "FBX Camera"
+        item.properties["publish_type"] = publish_type
+
+        # item.properties["publish_version"] = 10
 
         # run the base class validation
         # return super(UnrealActorPublishPlugin, self).validate(settings, item)
@@ -546,11 +551,13 @@ def _generate_fbx_export_task(destination_path, actor, actor_name):
     task = unreal.AssetExportTask()
     task.object = actor.get_world()      # the asset to export
     task.filename = filename        # the filename to export as
-    task.automated = True           # don't display the export options dialog
+    task.automated = False           # don't display the export options dialog
     task.replace_identical = True   # always overwrite the output
 
     # Setup export options for the export task
     task.options = unreal.FbxExportOption()
+    task.options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
+    task.options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
     # These are the default options for the FBX export
     # task.options.fbx_export_compatibility = fbx_2013
     # task.options.ascii = False
