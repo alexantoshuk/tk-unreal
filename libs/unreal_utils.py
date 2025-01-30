@@ -1,6 +1,17 @@
 import unreal
 import os
 
+SHOT_SEQUENCE_START = 1001
+
+
+def actor_exists(actor_name, actor_class=unreal.GeometryCacheActor):
+    # Check if an actor with the same name already exists in the level
+    world = unreal.UnrealEditorSubsystem().get_editor_world()
+    for actor in unreal.GameplayStatics.get_all_actors_of_class(world, actor_class):
+        if actor.get_actor_label() == actor_name:
+            return True
+    return False
+
 
 def get_version(name):
     name, ok, ver = name.rpartition(' v')
@@ -33,7 +44,7 @@ def up_version(name):
 
 def ctx_from_asset_path(path):
     # /Game/Assets/Prop/SM_Gun/SM_Gun
-    splitted = path.split('/')[:-1]
+    splitted = path.split('/')
     if splitted[:3] == ['', 'Game', 'Assets']:
         if len(splitted) >= 6:
             asset_type, code, step = splitted[3:6]
@@ -47,7 +58,7 @@ def ctx_from_asset_path(path):
 
 
 def ctx_from_shot_path(path):
-    splitted = path.split('/')[:-1]
+    splitted = path.split('/')
     if splitted[:3] == ['', 'Game', 'Scenes']:
         if len(splitted) >= 6:
             scn, shot, step = splitted[3:6]
@@ -160,7 +171,7 @@ def step_short_name(task_id):
     return step_short_name
 
 
-def unreal_import_alembic_asset(input_path, destination_path, destination_name, automated=True):
+def unreal_import_alembic_asset(input_path, destination_path, destination_name, automated=True, create_actor=False):
     """
     Import an ABC into Unreal Content Browser
 
@@ -173,16 +184,49 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
 
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
 
-    first_imported_object = None
+    task = tasks[0]
 
-    for task in tasks:
-        unreal.log("Import Task for: {}".format(task.filename))
-        for object_path in task.imported_object_paths:
-            unreal.log("Imported object: {}".format(object_path))
-            if not first_imported_object:
-                first_imported_object = object_path
+    if not task.imported_object_paths:
+        unreal.log_warning("No objects were imported")
+        return None
 
-    return first_imported_object
+    unreal.log("Import Task for: {}".format(task.filename))
+    geometry_cache_path = task.imported_object_paths[0]
+    unreal.log("Imported object: {}".format(geometry_cache_path))
+
+    if create_actor:
+        scn, shot, step = ctx_from_shot_path(destination_path)
+        level_name = f"{shot}_{step}"
+        seq_name = f"{shot}_{step}_sub"
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
+        if actor_exists(destination_name, unreal.GeometryCacheActor):
+            return geometry_cache_path
+        geometry_cache = unreal.load_asset(geometry_cache_path)
+
+        # Spawn the Geometry Cache actor
+        geometry_cache_actor = unreal.EditorActorSubsystem().spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        geometry_cache_actor.set_actor_label(destination_name)
+
+        # Load the Level Sequence
+        seq = unreal.load_asset(f"{destination_path}/{seq_name}")
+        if seq:
+            unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+
+            # Add the Geometry Cache actor to the Level Sequence
+            possessable = seq.add_possessable(geometry_cache_actor)
+            # possessable = seq.add_spawnable_from_instance(geometry_cache_actor)
+            track = possessable.add_track(unreal.MovieSceneGeometryCacheTrack)
+            section = track.add_section()
+            sequence_end = seq.get_playback_end()
+            section.set_range(SHOT_SEQUENCE_START, sequence_end)
+            section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
+            section.params = unreal.MovieSceneGeometryCacheParams(
+                geometry_cache_asset=geometry_cache,
+            )
+            # Log success
+            unreal.log(f"Geometry Cache actor '{destination_name}' added to the level and sequence '{seq_name}'.")
+
+    return geometry_cache_path
 
 
 def unreal_import_alembic_camera(input_path, destination_path, destination_name):
@@ -339,13 +383,18 @@ def _generate_alembic_import_task(
     task.async_ = True
 
     alembic_settings = unreal.AbcImportSettings()
-    if True:  # is Houdini? FIX to automatic determine this
-        # Assign the Alembic settings to the import task
-        # Customize Alembic import settings here if needed
-        alembic_settings.conversion_settings = unreal.AbcConversionSettings(
-            scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
-            rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
-        )
+
+    alembic_settings.conversion_settings = unreal.AbcConversionSettings(
+        scale=unreal.Vector(1, -1, 1),  # Set the scale using a Vector (adjust the values accordingly)
+        rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
+    )
+    alembic_settings.geometry_cache_settings = unreal.AbcGeometryCacheSettings(
+        compressed_position_precision=0.001,
+    )
+    alembic_settings.sampling_settings = unreal.AbcSamplingSettings(
+        frame_start=1001,
+
+    )
 
     alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
     task.options = alembic_settings
@@ -387,7 +436,7 @@ def _generate_alembic_camera_import_task(
         # Assign the Alembic settings to the import task
         # Customize Alembic import settings here if needed
         alembic_settings.conversion_settings = unreal.AbcConversionSettings(
-            scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
+            # scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
             rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
         )
 

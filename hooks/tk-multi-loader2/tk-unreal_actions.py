@@ -168,7 +168,7 @@ class UnrealActions(HookBaseClass):
 
         elif action_name == "import_alembic":
             destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
-            asset_path = unreal_utils.unreal_import_alembic_asset(path, destination_path, destination_name)
+            asset_path = unreal_utils.unreal_import_alembic_asset(path, destination_path, destination_name, create_actor=True)
 
         elif action_name == "import_fbx_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)

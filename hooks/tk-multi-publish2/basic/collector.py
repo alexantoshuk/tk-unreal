@@ -163,7 +163,7 @@ class UnrealSessionCollector(HookBaseClass):
             display_name or asset_name,  # Display name of item instance
         )
 
-        ctx = unreal_utils.ctx_from_asset_path(asset_path)
+        ctx = unreal_utils.ctx_from_asset_path(os.path.dirname(asset_path))
         if ctx:
             _type, code, step = ctx
             try:
