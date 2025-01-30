@@ -33,7 +33,7 @@ def up_version(name):
 
 def ctx_from_asset_path(path):
     # /Game/Assets/Prop/SM_Gun/SM_Gun
-    splitted = path.split('/')
+    splitted = path.split('/')[:-1]
     if splitted[:3] == ['', 'Game', 'Assets']:
         if len(splitted) >= 6:
             asset_type, code, step = splitted[3:6]
@@ -47,7 +47,7 @@ def ctx_from_asset_path(path):
 
 
 def ctx_from_shot_path(path):
-    splitted = path.split('/')
+    splitted = path.split('/')[:-1]
     if splitted[:3] == ['', 'Game', 'Scenes']:
         if len(splitted) >= 6:
             scn, shot, step = splitted[3:6]
