@@ -84,11 +84,11 @@ class UnrealActions(HookBaseClass):
                                      "caption": "Import into Content Browser",
                                      "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
 
-        # if "import_alembic_camera" in actions:
-        #     action_instances.append({"name": "import_alembic_camera",
-        #                              "params": None,
-        #                              "caption": "Import Camera into Content Browser",
-        #                              "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
+        if "import_alembic_camera" in actions:
+            action_instances.append({"name": "import_alembic_camera",
+                                     "params": None,
+                                     "caption": "Import Camera into Content Browser",
+                                     "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
 
         return action_instances
 
@@ -172,8 +172,8 @@ class UnrealActions(HookBaseClass):
 
         elif action_name == "import_fbx_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
-            asset_path = unreal_utils.unreal_import_fbx_camera(path, destination_path, destination_name)
-
+            ok = unreal_utils.unreal_import_fbx_camera(path, destination_path, destination_name)
+            asset_path = None
         elif action_name == "import_alembic_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
             asset_path = unreal_utils.unreal_import_alembic_camera(path, destination_path, destination_name)

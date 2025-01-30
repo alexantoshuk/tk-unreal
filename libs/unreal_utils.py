@@ -235,9 +235,9 @@ def unreal_import_fbx_camera(input_path, destination_path, destination_name):
 
     # world = unreal.EditorLevelLibrary.get_editor_world()
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
-    cam = unreal.SequencerTools.import_level_sequence_fbx(world, seq, [binding], import_setting, input_path)
-
-    return cam
+    ok = unreal.SequencerTools.import_level_sequence_fbx(world, seq, [binding], import_setting, input_path)
+    unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+    return ok
 
 
 def unreal_import_fbx_asset(input_path, destination_path, destination_name, automated=True):
