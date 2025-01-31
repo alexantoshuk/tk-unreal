@@ -162,6 +162,8 @@ class UnrealActions(HookBaseClass):
         if not os.path.exists(path):
             raise Exception("File not found on disk - '%s'" % path)
 
+        asset_path = None
+
         if action_name == "import_fbx":
             destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
             asset_path = unreal_utils.unreal_import_fbx_asset(path, destination_path, destination_name, automated=False)
@@ -173,20 +175,13 @@ class UnrealActions(HookBaseClass):
         elif action_name == "import_fbx_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
             ok = unreal_utils.unreal_import_fbx_camera(path, destination_path, destination_name)
-            asset_path = None
+
         elif action_name == "import_alembic_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
             asset_path = unreal_utils.unreal_import_alembic_camera(path, destination_path, destination_name)
-        else:
-            asset_path = None
 
         if asset_path:
             self._set_asset_metadata(asset_path, sg_publish_data)
-
-            # Focus the Unreal Content Browser on the imported asset
-            asset_paths = []
-            asset_paths.append(asset_path)
-            unreal.EditorAssetLibrary.sync_browser_to_objects(asset_paths)
 
     def _set_asset_metadata(self, asset_path, sg_publish_data):
         """

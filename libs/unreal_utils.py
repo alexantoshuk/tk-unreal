@@ -4,13 +4,45 @@ import os
 SHOT_SEQUENCE_START = 1001
 
 
-def actor_exists(actor_name, actor_class=unreal.GeometryCacheActor):
+def find_track(sequence, track_name):
+    for track in sequence.get_tracks():
+        if track.get_display_name() == track_name:
+            return track
+    return None
+
+
+def find_possessable(sequence, actor_name):
+    for track in sequence.get_possessables():
+        if track.get_display_name() == actor_name:
+            return track
+    return None
+
+
+def find_actor(actor_name, actor_class=unreal.GeometryCacheActor):
     # Check if an actor with the same name already exists in the level
     world = unreal.UnrealEditorSubsystem().get_editor_world()
     for actor in unreal.GameplayStatics.get_all_actors_of_class(world, actor_class):
         if actor.get_actor_label() == actor_name:
-            return True
-    return False
+            return actor
+    return None
+
+
+def find_actor_sequence_binding(seq, actor_name):
+    def walk(seq):
+        for b in seq.get_bindings():
+            # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
+            if b.get_name() == actor_name:
+                return (seq, b)
+
+        for track in seq.get_tracks():
+            for section in track.get_sections():
+                try:
+                    res = walk(section.get_sequence())
+                    if res:
+                        return res
+                except:
+                    pass
+    return walk(seq)
 
 
 def get_version(name):
@@ -141,24 +173,6 @@ def create_shot_context(parent_context, scene, shot, step):
     return context
 
 
-def find_actor_sequence_binding(seq, actor_name):
-    def walk(seq):
-        for b in seq.get_bindings():
-            # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
-            if b.get_name() == actor_name:
-                return (seq, b)
-
-        for track in seq.get_tracks():
-            for section in track.get_sections():
-                try:
-                    res = walk(section.get_sequence())
-                    if res:
-                        return res
-                except:
-                    pass
-    return walk(seq)
-
-
 def step_short_name(task_id):
     import sgtk
     engine = sgtk.platform.current_engine()
@@ -198,34 +212,43 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
         scn, shot, step = ctx_from_shot_path(destination_path)
         level_name = f"{shot}_{step}"
         seq_name = f"{shot}_{step}_sub"
-        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
-        if actor_exists(destination_name, unreal.GeometryCacheActor):
+
+        seq = unreal.load_asset(f"{destination_path}/{seq_name}")
+
+        if seq and find_possessable(seq, destination_name):
+            unreal.log(f"Geometry Cache track '{destination_name}' exists. Skip creation.")
             return geometry_cache_path
+
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
+        unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+
+        if find_actor(destination_name, unreal.GeometryCacheActor):
+            unreal.log(f"Geometry Cache actor '{destination_name}' exists. Skip creation.")
+            return geometry_cache_path
+
         geometry_cache = unreal.load_asset(geometry_cache_path)
 
         # Spawn the Geometry Cache actor
         geometry_cache_actor = unreal.EditorActorSubsystem().spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         geometry_cache_actor.set_actor_label(destination_name)
 
-        # Load the Level Sequence
-        seq = unreal.load_asset(f"{destination_path}/{seq_name}")
-        if seq:
-            unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+        # Add the Geometry Cache actor to the Level Sequence
+        possessable = seq.add_possessable(geometry_cache_actor)
+        # possessable = seq.add_spawnable_from_instance(geometry_cache_actor)
+        track = possessable.add_track(unreal.MovieSceneGeometryCacheTrack)
+        section = track.add_section()
+        sequence_end = seq.get_playback_end()
+        section.set_range(SHOT_SEQUENCE_START, sequence_end)
+        section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
+        section.params = unreal.MovieSceneGeometryCacheParams(
+            geometry_cache_asset=geometry_cache,
+        )
+        # Log success
+        unreal.log(f"Geometry Cache actor '{destination_name}' added to the level and sequence '{seq_name}'.")
+        return geometry_cache_path
 
-            # Add the Geometry Cache actor to the Level Sequence
-            possessable = seq.add_possessable(geometry_cache_actor)
-            # possessable = seq.add_spawnable_from_instance(geometry_cache_actor)
-            track = possessable.add_track(unreal.MovieSceneGeometryCacheTrack)
-            section = track.add_section()
-            sequence_end = seq.get_playback_end()
-            section.set_range(SHOT_SEQUENCE_START, sequence_end)
-            section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
-            section.params = unreal.MovieSceneGeometryCacheParams(
-                geometry_cache_asset=geometry_cache,
-            )
-            # Log success
-            unreal.log(f"Geometry Cache actor '{destination_name}' added to the level and sequence '{seq_name}'.")
-
+    # Focus the Unreal Content Browser on the imported asset
+    # unreal.EditorAssetLibrary.sync_browser_to_objects([geometry_cache_path])
     return geometry_cache_path
 
 
@@ -300,14 +323,19 @@ def unreal_import_fbx_asset(input_path, destination_path, destination_name, auto
 
     first_imported_object = None
 
-    for task in tasks:
-        unreal.log("Import Task for: {}".format(task.filename))
-        for object_path in task.imported_object_paths:
-            unreal.log("Imported object: {}".format(object_path))
-            if not first_imported_object:
-                first_imported_object = object_path
+    task = tasks[0]
 
-    return first_imported_object
+    if not task.imported_object_paths:
+        unreal.log_warning("No objects were imported")
+        return None
+
+    unreal.log("Import Task for: {}".format(task.filename))
+    object_path = task.imported_object_paths[0]
+    unreal.log("Imported object: {}".format(object_path))
+
+    # Focus the Unreal Content Browser on the imported asset
+    # unreal.EditorAssetLibrary.sync_browser_to_objects([object_path])
+    return object_path
 
 
 def _generate_fbx_import_task(
