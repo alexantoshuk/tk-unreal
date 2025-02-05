@@ -56,7 +56,9 @@ class BreakdownSceneOperations(Hook):
         # The _build_scene_item_dict method can be overriden by derived hooks.
         cur_level = unreal.LevelEditorSubsystem().get_current_level().get_path_name()
         path, _ = os.path.split(cur_level)
+        # print("CUR LEVEL!!!: ", path)
         for asset_path in unreal.EditorAssetLibrary.list_assets(path):
+            # print("ASSET PATH !!!: ", asset_path)
             scene_item_dict = self._build_scene_item_dict(asset_path)
             if not scene_item_dict:
                 continue
@@ -80,29 +82,32 @@ class BreakdownSceneOperations(Hook):
 
         # engine = sgtk.platform.current_engine()
         asset_data = unreal.EditorAssetLibrary.find_asset_data(asset_path)
-
+        # print("ASSET CLASS!!!: ", asset_data.get_class().get_name())
         if (not asset_data) or (asset_data.get_class().get_name() not in ('GeometryCache', 'StaticMesh', 'SkeletalMesh', 'Skeleton', 'AnimationSequence')):
             return
 
         asset = unreal.load_asset(asset_path)
         if not asset:
             return
-
+        # print("ASSET!!!: ", asset)
         try:
             source_path = asset.get_editor_property("asset_import_data").get_first_filename()
+            # print("ASSET SRC PATH!!!: ", source_path)
         except:
             return
 
-        sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
-        if not sgtk_path:
-            self.logger.debug("Asset `{}` does not have the tag `{}`".format(
-                asset.get_path_name(), source_path
-            ))
-            return None
+        # sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
+        # if not sgtk_path:
+        #     self.logger.debug("Asset `{}` does not have the tag `{}`".format(
+        #         asset.get_path_name(), source_path
+        #     ))
+        #     return None
 
         scene_item_dict = {
             "node": asset.get_path_name(),
+            "node_name": asset.get_path_name(),
             "type": str(type(asset)),
+            "node_type": str(type(asset)),
             # Must be a path linked ot a template with a {version} key
             # (see tk-multi-breakdown/python/tk_multi_breakdown/breakdown.py)
             "path": source_path,
@@ -110,7 +115,7 @@ class BreakdownSceneOperations(Hook):
 
         return scene_item_dict
 
-    def update(self, items):
+    def update(self, item=None, items=None):
         """
         Perform replacements given a number of scene items passed from the app.
 
@@ -127,15 +132,19 @@ class BreakdownSceneOperations(Hook):
         the that each node should be updated *to* rather than the current path.
         """
 
-        for item in items:
-            asset_to_update = unreal.load_asset(item["node"])
+        def item_update(item):
+            node_path = item.get("node", item["node_name"])
+            node_type = item.get("type", item["node_type"])
+            file_path = item["path"]
+
+            asset_to_update = unreal.load_asset(node_path)
             if not asset_to_update:
                 self.logger.warning(f"Could not load asset {asset_to_update}.")
-                continue
+                return
 
             asset_path = unreal.Paths.get_path(asset_to_update.get_path_name())
             asset_name = asset_to_update.get_name()
-            new_source_file_path = item["path"]
+            new_source_file_path = file_path
 
             publishes = sgtk.util.find_publish(
                 self.sgtk,
@@ -155,12 +164,12 @@ class BreakdownSceneOperations(Hook):
                 self.logger.warning(
                     f"No PublishedFile found in Shotgun for path `{new_source_file_path}`"
                 )
-                continue
+                return
 
             try:
                 published_file_type = sg_publish_data["published_file_type"]["name"]
             except:
-                continue
+                return
 
             if published_file_type == "FBX":
                 unreal_utils.unreal_import_fbx_asset(new_source_file_path, asset_path, asset_name)
@@ -170,3 +179,9 @@ class BreakdownSceneOperations(Hook):
                 unreal_utils.unreal_import_alembic_asset(new_source_file_path, asset_path, asset_name)
             elif published_file_type == "Alembic Camera":
                 unreal_utils.unreal_import_alembic_camera(new_source_file_path, asset_path, asset_name)
+
+        if items:
+            for item in items:
+                item_update(item)
+        else:
+            item_update(item)

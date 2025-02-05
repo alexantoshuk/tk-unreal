@@ -222,9 +222,11 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
         unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
         unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
 
-        if find_actor(destination_name, unreal.GeometryCacheActor):
-            unreal.log(f"Geometry Cache actor '{destination_name}' exists. Skip creation.")
-            return geometry_cache_path
+        actor = find_actor(destination_name, unreal.GeometryCacheActor)
+        if actor:
+            unreal.log(f"Geometry Cache actor '{destination_name}' exists. Replace it.")
+            actor.destroy_actor()
+            # return geometry_cache_path
 
         geometry_cache = unreal.load_asset(geometry_cache_path)
 
