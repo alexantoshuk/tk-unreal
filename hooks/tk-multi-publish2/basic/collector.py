@@ -164,15 +164,18 @@ class UnrealSessionCollector(HookBaseClass):
         )
 
         ctx = unreal_utils.ctx_from_asset_path(os.path.dirname(asset_path))
+        unreal.log(f"Try to get SG Context from asset path")
         if ctx:
             _type, code, step = ctx
+            unreal.log(f"Determine SG Context items: ASSET_TYPE: {_type}, ASSET: {code}, PIPE_STEP: {step}")
             try:
-                context = unreal_utils.create_asset_context(asset_item.context, _type, code, step)
+                context = unreal_utils.create_asset_context(_type, code, step)
             except:
                 self.logger.error(f"Can't find task with step '{step}' for asset '{code}'")
             unreal.log(f"Get SG Context from asset path: {context} {context.to_dict()} ")
             asset_item.properties["context"] = context
         else:
+            unreal.log(f"SG Context: None")
             asset_item.properties["context"] = asset_item.context
 
         asset_item.properties["ctx"] = ctx
@@ -204,19 +207,23 @@ class UnrealSessionCollector(HookBaseClass):
         if anim:
             seq, _ = anim
             ctx = unreal_utils.ctx_from_actor_sequence(seq)
+            unreal.log(f"Try to get SG Context from sequence name")
         else:
             lvl = actor.get_level()
             ctx = unreal_utils.ctx_from_actor_level(lvl)
+            unreal.log(f"Try to get SG Context from level name")
 
         if ctx:
             scene, shot, step = ctx
-            try:
-                context = unreal_utils.create_shot_context(actor_item.context, scene, shot, step)
-            except:
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
+            context = unreal_utils.create_shot_context(scene, shot, step)
+            if not context:
                 self.logger.error(f"Can't find task with step '{step}' for shot '{shot}'")
-            unreal.log(f"Get SG Context from level/sequence name: {context} {context.to_dict()} ")
+                return
+            unreal.log(f"SG Context: {context} {context.to_dict()} ")
             actor_item.properties["context"] = context
         else:
+            unreal.log(f"SG Context: None")
             actor_item.properties["context"] = actor_item.context
         actor_item.properties["ctx"] = ctx
 

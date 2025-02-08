@@ -8,6 +8,10 @@ import sys
 import unreal
 import datetime
 
+from pathlib import Path
+libs_path = os.path.join(str(Path(__file__).parents[3]), 'libs')
+sys.path.insert(0, libs_path)
+import unreal_utils
 
 # Local storage path field for known Oses.
 _OS_LOCAL_STORAGE_PATH_FIELD = {
@@ -342,16 +346,18 @@ class UnrealActorPublishPlugin(HookBaseClass):
         fields = {"name": actor_name}
 
         # Add today's date to the fields
-        date = datetime.date.today()
-        fields["YYYY"] = date.year
-        fields["MM"] = date.month
-        fields["DD"] = date.day
+        # date = datetime.date.today()
+        # fields["YYYY"] = date.year
+        # fields["MM"] = date.month
+        # fields["DD"] = date.day
         ctx = item.properties["ctx"]
-        if ctx:
-            scene, shot, step = ctx
-            fields['Sequence'] = scene
-            fields['Shot'] = shot
-            fields['Step'] = step
+        scene, shot, step = ctx
+        fields['Sequence'] = scene
+        fields['Shot'] = shot
+        fields['Step'] = step
+        # published_name
+
+        fields['version'] = 0
 
         # Stash the Unrea asset path and name in properties
         item.properties["actor"] = actor
@@ -360,6 +366,13 @@ class UnrealActorPublishPlugin(HookBaseClass):
         # Get destination path for exported FBX from publish template
         # which should be project root + publish template
         publish_path = publish_template.apply_fields(fields)
+
+        published_name = os.path.basename(publish_path).replace(".v000", "")
+        version = unreal_utils.last_published_version(item.context, published_name)
+        if version is not None:
+            fields['version'] = version + 1
+            publish_path = publish_template.apply_fields(fields)
+
         publish_path = os.path.normpath(publish_path)
         if not os.path.isabs(publish_path):
             # If the path is not absolute, prepend the publish folder setting.
@@ -372,14 +385,9 @@ class UnrealActorPublishPlugin(HookBaseClass):
                     publish_path
                 )
             )
+
         item.properties["publish_path"] = publish_path
         item.properties["path"] = publish_path
-
-        # Remove the filename from the publish path
-        destination_path = os.path.dirname(publish_path)
-
-        # Stash the destination path in properties
-        item.properties["destination_path"] = destination_path
 
         # Set the Published File Type
         publish_type = "FBX"
@@ -413,8 +421,8 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # Ensure that the destination path exists before exporting since the
         # Unreal FBX exporter doesn't check that
-        destination_path = item.properties["destination_path"]
-        self.parent.ensure_folder_exists(destination_path)
+        filename = item.properties["path"]
+        self.parent.ensure_folder_exists(os.path.dirname(filename))
 
         # Export the asset from Unreal
         actor = item.properties["actor"]
@@ -422,13 +430,13 @@ class UnrealActorPublishPlugin(HookBaseClass):
         anim = item.properties["anim"]
         if not anim:
             try:
-                _unreal_export_actor_to_fbx(destination_path, actor, actor_name)
+                _unreal_export_actor_to_fbx(filename, actor, actor_name)
             except Exception:
                 self.logger.debug("Actor %s cannot be exported to FBX." % (actor))
         else:
             try:
                 seq, bind = anim
-                _unreal_export_anim_actor_to_fbx(destination_path, actor, actor_name, seq, bind)
+                _unreal_export_anim_actor_to_fbx(filename, actor, actor_name, seq, bind)
             except Exception:
                 self.logger.debug("Animated actor %s cannot be exported to FBX." % (actor))
 
@@ -451,16 +459,16 @@ class UnrealActorPublishPlugin(HookBaseClass):
         super(UnrealActorPublishPlugin, self).finalize(settings, item)
 
 
-def _unreal_export_anim_actor_to_fbx(destination_path, actor, actor_name, seq, bind):
+def _unreal_export_anim_actor_to_fbx(filename, actor, actor_name, seq, bind):
     """
     Export an asset to FBX from Unreal
 
-    :param destination_path: The path where the exported FBX will be placed
+    :param filename: The path where the exported FBX will be placed
     :param actor: The Unreal actor to export to FBX
     :param actor_name: The asset name to use for the FBX filename
     """
     # Get an export task
-    params = _generate_sequencer_export_fbx_params(destination_path, actor, actor_name, seq, bind)
+    params = _generate_sequencer_export_fbx_params(filename, actor, actor_name, seq, bind)
     if not params:
         return False, None
 
@@ -473,18 +481,7 @@ def _unreal_export_anim_actor_to_fbx(destination_path, actor, actor_name, seq, b
     return result, params.fbx_file_name
 
 
-def _generate_sequencer_export_fbx_params(destination_path, actor, actor_name, seq, bind):
-    """
-    Create and configure an Unreal AssetExportTask
-
-    :param destination_path: The path where the exported FBX will be placed
-    :param actor: The Unreal actor to export to FBX
-    :param actor_name: The FBX filename to export to
-    :return the configured AssetExportTask
-    """
-
-    filename = os.path.join(destination_path, actor_name + ".fbx")
-
+def _generate_sequencer_export_fbx_params(filename, actor, actor_name, seq, bind):
     # Setup AssetExportTask for non-interactive mode
     params = unreal.SequencerExportFBXParams()
     params.world = unreal.get_editor_subsystem(
@@ -509,7 +506,7 @@ def _generate_sequencer_export_fbx_params(destination_path, actor, actor_name, s
     return params
 
 
-def _unreal_export_actor_to_fbx(destination_path, actor, actor_name):
+def _unreal_export_actor_to_fbx(filename, actor, actor_name):
     """
     Export an asset to FBX from Unreal
 
@@ -518,7 +515,7 @@ def _unreal_export_actor_to_fbx(destination_path, actor, actor_name):
     :param actor_name: The asset name to use for the FBX filename
     """
     # Get an export task
-    task = _generate_fbx_export_task(destination_path, actor, actor_name)
+    task = _generate_fbx_export_task(filename, actor, actor_name)
     if not task:
         return False, None
 
@@ -535,17 +532,9 @@ def _unreal_export_actor_to_fbx(destination_path, actor, actor_name):
     return result, task.filename
 
 
-def _generate_fbx_export_task(destination_path, actor, actor_name):
-    """
-    Create and configure an Unreal AssetExportTask
+def _generate_fbx_export_task(filename, actor, actor_name):
 
-    :param destination_path: The path where the exported FBX will be placed
-    :param actor: The Unreal actor to export to FBX
-    :param actor_name: The FBX filename to export to
-    :return the configured AssetExportTask
-    """
-
-    filename = os.path.join(destination_path, actor_name + ".fbx")
+    # filename = os.path.join(destination_path, actor_name + ".fbx")
 
     # Setup AssetExportTask for non-interactive mode
     task = unreal.AssetExportTask()

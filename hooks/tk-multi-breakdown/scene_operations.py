@@ -56,12 +56,14 @@ class BreakdownSceneOperations(Hook):
         # The _build_scene_item_dict method can be overriden by derived hooks.
         cur_level = unreal.LevelEditorSubsystem().get_current_level().get_path_name()
         path, _ = os.path.split(cur_level)
-        # print("CUR LEVEL!!!: ", path)
+        self.logger.warning(f"Determine current level: {path}")
+
         for asset_path in unreal.EditorAssetLibrary.list_assets(path):
-            # print("ASSET PATH !!!: ", asset_path)
+            self.logger.warning(f"Scan assets in current level: {asset_path}")
             scene_item_dict = self._build_scene_item_dict(asset_path)
             if not scene_item_dict:
                 continue
+            self.logger.warning(f"Found item: {scene_item_dict}")
             refs.append(scene_item_dict)
 
         return refs
@@ -82,17 +84,16 @@ class BreakdownSceneOperations(Hook):
 
         # engine = sgtk.platform.current_engine()
         asset_data = unreal.EditorAssetLibrary.find_asset_data(asset_path)
-        # print("ASSET CLASS!!!: ", asset_data.get_class().get_name())
+
         if (not asset_data) or (asset_data.get_class().get_name() not in ('GeometryCache', 'StaticMesh', 'SkeletalMesh', 'Skeleton', 'AnimationSequence')):
             return
 
         asset = unreal.load_asset(asset_path)
         if not asset:
             return
-        # print("ASSET!!!: ", asset)
+
         try:
             source_path = asset.get_editor_property("asset_import_data").get_first_filename()
-            # print("ASSET SRC PATH!!!: ", source_path)
         except:
             return
 
@@ -171,6 +172,9 @@ class BreakdownSceneOperations(Hook):
             except:
                 return
 
+            self.logger.warning(
+                f"Try to update {node_path}/{asset_name} with {published_file_type} '{new_source_file_path}'"
+            )
             if published_file_type == "FBX":
                 unreal_utils.unreal_import_fbx_asset(new_source_file_path, asset_path, asset_name)
             elif published_file_type == "FBX Camera":

@@ -8,6 +8,10 @@ import sys
 import unreal
 import datetime
 
+from pathlib import Path
+libs_path = os.path.join(str(Path(__file__).parents[3]), 'libs')
+sys.path.insert(0, libs_path)
+import unreal_utils
 
 # Local storage path field for known Oses.
 _OS_LOCAL_STORAGE_PATH_FIELD = {
@@ -342,16 +346,12 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         fields = {"name": asset_name}
 
         # Add today's date to the fields
-        date = datetime.date.today()
-        fields["YYYY"] = date.year
-        fields["MM"] = date.month
-        fields["DD"] = date.day
         ctx = item.properties["ctx"]
-        if ctx:
-            _type, code, step = ctx
-            fields['sg_asset_type'] = _type
-            fields['Asset'] = code
-            fields['Step'] = step
+
+        _type, code, step = ctx
+        fields['sg_asset_type'] = _type
+        fields['Asset'] = code
+        fields['Step'] = step
 
         # Stash the Unrea asset path and name in properties
         item.properties["asset_path"] = asset_path
@@ -360,6 +360,19 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # Get destination path for exported FBX from publish template
         # which should be project root + publish template
         publish_path = publish_template.apply_fields(fields)
+
+        fields['version'] = 0
+
+        # Get destination path for exported FBX from publish template
+        # which should be project root + publish template
+        publish_path = publish_template.apply_fields(fields)
+
+        published_name = os.path.basename(publish_path).replace(".v000", "")
+        version = unreal_utils.last_published_version(item.context, published_name)
+        if version is not None:
+            fields['version'] = version + 1
+            publish_path = publish_template.apply_fields(fields)
+
         publish_path = os.path.normpath(publish_path)
         if not os.path.isabs(publish_path):
             # If the path is not absolute, prepend the publish folder setting.
@@ -374,12 +387,6 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             )
         item.properties["publish_path"] = publish_path
         item.properties["path"] = publish_path
-
-        # Remove the filename from the publish path
-        destination_path = os.path.dirname(publish_path)
-
-        # Stash the destination path in properties
-        item.properties["destination_path"] = destination_path
 
         # Set the Published File Type
         item.properties["publish_type"] = "FBX"
@@ -408,14 +415,14 @@ class UnrealAssetPublishPlugin(HookBaseClass):
 
         # Ensure that the destination path exists before exporting since the
         # Unreal FBX exporter doesn't check that
-        destination_path = item.properties["destination_path"]
-        self.parent.ensure_folder_exists(destination_path)
+        filename = item.properties["path"]
+        self.parent.ensure_folder_exists(os.path.dirname(filename))
 
         # Export the asset from Unreal
         asset_path = item.properties["asset_path"]
         asset_name = item.properties["asset_name"]
         try:
-            _unreal_export_asset_to_fbx(destination_path, asset_path, asset_name)
+            _unreal_export_asset_to_fbx(filename, asset_path, asset_name)
         except Exception:
             self.logger.debug("Asset %s cannot be exported to FBX." % (asset_path))
 
@@ -438,16 +445,16 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         super(UnrealAssetPublishPlugin, self).finalize(settings, item)
 
 
-def _unreal_export_asset_to_fbx(destination_path, asset_path, asset_name):
+def _unreal_export_asset_to_fbx(filename, asset_path, asset_name):
     """
     Export an asset to FBX from Unreal
 
-    :param destination_path: The path where the exported FBX will be placed
+    :param filename: The path where the exported FBX will be placed
     :param asset_path: The Unreal asset to export to FBX
     :param asset_name: The asset name to use for the FBX filename
     """
     # Get an export task
-    task = _generate_fbx_export_task(destination_path, asset_path, asset_name)
+    task = _generate_fbx_export_task(filename, asset_path, asset_name)
     if not task:
         return False, None
 
@@ -464,22 +471,13 @@ def _unreal_export_asset_to_fbx(destination_path, asset_path, asset_name):
     return result, task.filename
 
 
-def _generate_fbx_export_task(destination_path, asset_path, asset_name):
-    """
-    Create and configure an Unreal AssetExportTask
+def _generate_fbx_export_task(filename, asset_path, asset_name):
 
-    :param destination_path: The path where the exported FBX will be placed
-    :param asset_path: The Unreal asset to export to FBX
-    :param asset_name: The FBX filename to export to
-    :return the configured AssetExportTask
-    """
     loaded_asset = unreal.EditorAssetLibrary.load_asset(asset_path)
 
     if not loaded_asset:
         unreal.log_error("Failed to create FBX export task for {}: Could not load asset {}".format(asset_name, asset_path))
         return None
-
-    filename = os.path.join(destination_path, asset_name + ".fbx")
 
     # Setup AssetExportTask for non-interactive mode
     task = unreal.AssetExportTask()

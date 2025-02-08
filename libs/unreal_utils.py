@@ -119,58 +119,69 @@ def ctx_from_actor_level(level):
         return None
 
 
-def create_asset_context(parent_context, asset_type, code, step):
+def last_published_version(ctx, published_name):
     import sgtk
     engine = sgtk.platform.current_engine()
-    engine.sgtk.synchronize_filesystem_structure()
+    d = ctx.to_dict()
+    project = d['project']
+    entity = d['entity']
 
-    root = engine.context.filesystem_locations[0]
-    path = os.path.join(root, "assets", asset_type, code, step)
-
-    context = engine.sgtk.context_from_path(path)
-    d = context.to_dict()
-
-    task_data = engine.shotgun.find_one("Task", [
-        ["step", "is", d["step"]],
-        ["entity", "is", d["entity"]],
-    ], ["name", "content"])
-
-    if not task_data:
-        unreal.log_error(f"Can't find task with step '{step}' for asset '{code}'")
-
-    content = task_data.get('content')
-    task_data.setdefault('name', content)
-
-    d['task'] = task_data
-    d['source_entity'] = parent_context.source_entity
-    context = sgtk.Context.from_dict(engine.sgtk, d)
-    return context
+    data = engine.shotgun.find_one("PublishedFile", [
+        ["project", "is", project],
+        ["entity", "is", entity],
+        ["name", "is", published_name]
+    ],
+        fields=["version_number"],
+        order=[
+            {'field_name': 'version_number', 'direction': 'desc'},
+    ]
+    )
+    if data:
+        return data.get("version_number")
 
 
-def create_shot_context(parent_context, scene, shot, step):
+def create_asset_context(asset_type, asset, step):
     import sgtk
     engine = sgtk.platform.current_engine()
-    engine.sgtk.synchronize_filesystem_structure()
 
-    root = engine.context.filesystem_locations[0]
-    path = os.path.join(root, "scenes", scene, shot, step)
-    context = engine.sgtk.context_from_path(path)
-    d = context.to_dict()
+    ctx = engine.context
+    asset = engine.shotgun.find_one("Asset", [
+        ["project", "is", ctx.project],
+        ["sg_asset_type", asset_type]
+        ["code", "is", asset],
+    ])
+    if not asset:
+        return
     task_data = engine.shotgun.find_one("Task", [
-        ["step", "is", d["step"]],
-        ["entity", "is", d["entity"]],
-    ], ["name", "content"])
-
+        ["step.Step.short_name", "is", step],
+        ["entity", "is", asset],
+    ], ["name", "content", "step.Step.short_name"])
     if not task_data:
-        unreal.log_error(f"Can't find task with step '{step}' for shot '{shot}'")
+        return
+    ctx = engine.sgtk.context_from_entity("Task", task_data["id"])
+    return ctx
 
-    content = task_data.get('content')
-    task_data.setdefault('name', content)
 
-    d['task'] = task_data
-    d['source_entity'] = parent_context.source_entity
-    context = sgtk.Context.from_dict(engine.sgtk, d)
-    return context
+def create_shot_context(scene, shot, step):
+    import sgtk
+    engine = sgtk.platform.current_engine()
+
+    ctx = engine.context
+    shot = engine.shotgun.find_one("Shot", [
+        ["project", "is", ctx.project],
+        ["sg_sequence.Sequence.code", "is", scene],
+        ["code", "is", shot],
+    ])
+    if not shot:
+        return
+    task_data = engine.shotgun.find_one("Task", [
+        ["step.Step.short_name", "is", step],
+        ["entity", "is", shot],
+    ], ["name", "content", "step.Step.short_name"])
+    if not task_data:
+        return
+    ctx = engine.sgtk.context_from_entity("Task", task_data["id"])
+    return ctx
 
 
 def step_short_name(task_id):
