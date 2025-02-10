@@ -56,14 +56,14 @@ class BreakdownSceneOperations(Hook):
         # The _build_scene_item_dict method can be overriden by derived hooks.
         cur_level = unreal.LevelEditorSubsystem().get_current_level().get_path_name()
         path, _ = os.path.split(cur_level)
-        self.logger.warning(f"Determine current level: {path}")
+        unreal.log(f"Current level: {path}")
 
         for asset_path in unreal.EditorAssetLibrary.list_assets(path):
-            self.logger.warning(f"Scan assets in current level: {asset_path}")
+            unreal.log(f"Found asset: {asset_path}")
             scene_item_dict = self._build_scene_item_dict(asset_path)
             if not scene_item_dict:
                 continue
-            self.logger.warning(f"Found item: {scene_item_dict}")
+            unreal.log(f"Accept item: {scene_item_dict}")
             refs.append(scene_item_dict)
 
         return refs
@@ -84,8 +84,9 @@ class BreakdownSceneOperations(Hook):
 
         # engine = sgtk.platform.current_engine()
         asset_data = unreal.EditorAssetLibrary.find_asset_data(asset_path)
-
-        if (not asset_data) or (asset_data.get_class().get_name() not in ('GeometryCache', 'StaticMesh', 'SkeletalMesh', 'Skeleton', 'AnimationSequence')):
+        asset_type = asset_data.get_class().get_name()
+        # unreal.log(f"Asset type: {asset_type}")
+        if asset_type not in ('GeometryCache', 'AnimSequence', 'StaticMesh', 'SkeletalMesh', 'Skeleton'):
             return
 
         asset = unreal.load_asset(asset_path)
@@ -95,6 +96,7 @@ class BreakdownSceneOperations(Hook):
         try:
             source_path = asset.get_editor_property("asset_import_data").get_first_filename()
         except:
+            unreal.log_error(f"Can't get source file from asset: ", asset_path)
             return
 
         # sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
@@ -140,7 +142,7 @@ class BreakdownSceneOperations(Hook):
 
             asset_to_update = unreal.load_asset(node_path)
             if not asset_to_update:
-                self.logger.warning(f"Could not load asset {asset_to_update}.")
+                unreal.log(f"Could not load asset {asset_to_update}.")
                 return
 
             asset_path = unreal.Paths.get_path(asset_to_update.get_path_name())
@@ -162,7 +164,7 @@ class BreakdownSceneOperations(Hook):
             )
             sg_publish_data = publishes.get(new_source_file_path)
             if not sg_publish_data:
-                self.logger.warning(
+                unreal.log_warning(
                     f"No PublishedFile found in Shotgun for path `{new_source_file_path}`"
                 )
                 return
@@ -172,7 +174,7 @@ class BreakdownSceneOperations(Hook):
             except:
                 return
 
-            self.logger.warning(
+            unreal.log(
                 f"Try to update {node_path}/{asset_name} with {published_file_type} '{new_source_file_path}'"
             )
             if published_file_type == "FBX":

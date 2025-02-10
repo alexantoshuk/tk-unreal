@@ -442,7 +442,10 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         :param item: Item to process
         """
         # do the base class finalization
-        super(UnrealAssetPublishPlugin, self).finalize(settings, item)
+        try:
+            super(UnrealAssetPublishPlugin, self).finalize(settings, item)
+        except:
+            pass  # !FIXME: Raise exception when publish to tot assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
 
 
 def _unreal_export_asset_to_fbx(filename, asset_path, asset_name):

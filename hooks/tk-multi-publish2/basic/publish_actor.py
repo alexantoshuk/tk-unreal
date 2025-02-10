@@ -456,7 +456,10 @@ class UnrealActorPublishPlugin(HookBaseClass):
         :param item: Item to process
         """
         # do the base class finalization
-        super(UnrealActorPublishPlugin, self).finalize(settings, item)
+        try:
+            super(UnrealActorPublishPlugin, self).finalize(settings, item)
+        except:
+            pass  # !FIXME: Raise exception when publish to tot assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
 
 
 def _unreal_export_anim_actor_to_fbx(filename, actor, actor_name, seq, bind):
