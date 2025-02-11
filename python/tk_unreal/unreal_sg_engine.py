@@ -101,6 +101,10 @@ class ShotgunEngineWrapper(UESGEngine):
         engine = sgtk.platform.current_engine()
 
         unreal.log("execute_command called for {0}".format(command_name))
+        if command_name == "Publish rendered movies...":
+            unreal.EditorActorSubsystem().select_nothing()
+            command_name = "Publish..."
+
         if command_name in engine.commands:
             unreal.log("execute_command: Command {0} found.".format(command_name))
             command = engine.commands[command_name]
@@ -316,15 +320,17 @@ class ShotgunEngineWrapper(UESGEngine):
 
         return menu_items
 
-    def _add_menu_item_from_command(self, menu_items, command):
+    def _add_menu_item_from_command(self, menu_items, command, title=None):
         """
         Adds the given command to the list of menu items using the command's properties
         """
+        if not title:
+            title = command.name
         self._add_menu_item(
             menu_items,
             command.properties.get("type", "default"),
             command.properties.get("short_name", command.name),
-            command.name,
+            title,
             command.properties.get("description", "")
         )
 
@@ -419,9 +425,13 @@ class ShotgunEngineWrapper(UESGEngine):
 
         for app_name in sorted(commands_by_app.keys()):
             # Exclude the Publish app if it doesn't have any context
-            if app_name == "Publish" and not has_selection:
-                pass
-                # continue
+            if app_name == "Publish":
+                if not self.selected_assets:
+                    cmd_obj = commands_by_app[app_name][0]
+                    if not cmd_obj.favourite:
+                        self._add_menu_item_from_command(menu_items, cmd_obj, "Publish rendered movies...")
+                if not has_selection:
+                    continue
 
             if len(commands_by_app[app_name]) > 1:
                 # more than one menu entry for this app

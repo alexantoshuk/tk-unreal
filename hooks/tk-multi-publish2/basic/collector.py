@@ -87,12 +87,8 @@ class UnrealSessionCollector(HookBaseClass):
         # Create an item representing the current Unreal session
         parent_item = self.collect_current_session(settings, parent_item)
 
-        # Collect assets selected in Unreal
-        self.collect_selected_assets(parent_item)
-        # Collect actors selected in Unreal
-        self.collect_selected_actors(parent_item)
-        # Collect rendered movies
-        self.collect_rendered_movies(parent_item)
+        if self.collect_selected_assets(parent_item) == 0 and self.collect_selected_actors(parent_item) == 0:
+            self.collect_rendered_movies(parent_item)
 
     def collect_current_session(self, settings, parent_item):
         """
@@ -158,20 +154,23 @@ class UnrealSessionCollector(HookBaseClass):
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
         sequence_edits = None
         # Iterate through the selected assets and get their info and add them as items to be published
+        n = 0
         for asset in unreal_sg.selected_assets:
-            if asset.asset_class_path.asset_name == "LevelSequence":
-                if sequence_edits is None:
-                    sequence_edits = self.retrieve_sequence_edits()
-                self.collect_level_sequence(parent_item, asset, sequence_edits)
-            else:
-                self.create_asset_item(
-                    parent_item,
-                    # :class:`Name` instances, we cast them to strings otherwise
-                    # string operations fail down the line..
-                    "%s" % unreal_sg.object_path(asset),
-                    "%s" % asset.asset_class_path.asset_name,
-                    "%s" % asset.asset_name,
-                )
+            # if asset.asset_class_path.asset_name == "LevelSequence":
+            #     if sequence_edits is None:
+            #         sequence_edits = self.retrieve_sequence_edits()
+            #     self.collect_level_sequence(parent_item, asset, sequence_edits)
+            # else:
+            if self.create_asset_item(
+                parent_item,
+                # :class:`Name` instances, we cast them to strings otherwise
+                # string operations fail down the line..
+                "%s" % unreal_sg.object_path(asset),
+                "%s" % asset.asset_class_path.asset_name,
+                "%s" % asset.asset_name,
+            ):
+                n += 1
+        return n
 
     def create_asset_item(self, parent_item, asset_path, asset_type, asset_name, display_name=None):
         """
@@ -228,6 +227,8 @@ class UnrealSessionCollector(HookBaseClass):
             return
         # Iterate through the selected assets and get their info and add them as items to be published
         active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
+
+        n = 0
         for actor in selected_actors:
             display_name = actor_name = actor.get_actor_label()
             anim = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
@@ -235,7 +236,7 @@ class UnrealSessionCollector(HookBaseClass):
                 seq, binding = anim
                 display_name = f"{actor_name}\n({seq.get_name()})"
 
-            self.create_actor_item(
+            if self.create_actor_item(
                 parent_item,
                 # :class:`Name` instances, we cast them to strings otherwise
                 # string operations fail down the line..
@@ -244,7 +245,9 @@ class UnrealSessionCollector(HookBaseClass):
                 anim,
                 "%s" % actor_name,
                 display_name,
-            )
+            ):
+                n += 1
+        return n
 
     def create_actor_item(self, parent_item, actor, actor_type, anim, actor_name, display_name=None):
         """

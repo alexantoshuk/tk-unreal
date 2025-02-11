@@ -2,6 +2,7 @@ import unreal
 import os
 import glob
 import subprocess
+import shutil
 
 SHOT_SEQUENCE_START = 1001
 PROJECT_ROOT = os.path.normpath(unreal.SystemLibrary.get_project_directory())
@@ -14,11 +15,14 @@ def tk_root(ctx):
 
 def ffmpeg_path(ctx):
     ffmpeg = os.path.join(tk_root(ctx), 'app', 'Windows', 'ffmpeg', 'bin', 'ffmpeg.exe')
+    if not os.path.isfile(ffmpeg):
+        ffmpeg = shutil.which("ffmpeg")
     unreal.log(f"FFmpeg Path: {ffmpeg}")
     return ffmpeg
 
 
 def convert_mov_to_mp4(ctx, src, dst):
+
     commands = [
         ffmpeg_path(ctx),
         "-i",
@@ -95,6 +99,9 @@ def find_actor(actor_name, actor_class=unreal.GeometryCacheActor):
 
 
 def find_actor_sequence_binding(seq, actor_name):
+    if not seq:
+        return
+
     def walk(seq):
         for b in seq.get_bindings():
             # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
@@ -241,10 +248,14 @@ def sg_asset_type(asset_id):
 def ctx_from_context(context):
     entity = context.entity
     step = context.step
-    step_id = step["id"]
+
+    step_shortname = None
 
     if (not entity) or (not step):
         return
+
+    step_id = step["id"]
+
     entity_type = entity.get("type")
     if entity_type == "Shot":
         shot = entity.get("code", entity.get("name"))
@@ -252,6 +263,8 @@ def ctx_from_context(context):
             return
         scene = shot.split("_", 1)[0]
         step_shortname = step_short_name2(step_id)
+        if not step_shortname:
+            step_shortname = "LAY"
         return scene, shot, step_shortname
 
     elif entity_type == "Asset":
