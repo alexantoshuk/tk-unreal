@@ -13,7 +13,6 @@ unreal.log("Loading SG Engine for Unreal from {}".format(__file__))
 # Shotgun integration components were renamed to Shotgrid from UE5
 if hasattr(unreal, "ShotgridEngine"):
     UESGEngine = unreal.ShotgridEngine
-
 else:
     UESGEngine = unreal.ShotgunEngine
 
@@ -421,7 +420,8 @@ class ShotgunEngineWrapper(UESGEngine):
         for app_name in sorted(commands_by_app.keys()):
             # Exclude the Publish app if it doesn't have any context
             if app_name == "Publish" and not has_selection:
-                continue
+                pass
+                # continue
 
             if len(commands_by_app[app_name]) > 1:
                 # more than one menu entry for this app

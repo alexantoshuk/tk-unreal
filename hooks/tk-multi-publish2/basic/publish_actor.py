@@ -350,14 +350,18 @@ class UnrealActorPublishPlugin(HookBaseClass):
         # fields["YYYY"] = date.year
         # fields["MM"] = date.month
         # fields["DD"] = date.day
-        ctx = item.properties["ctx"]
-        scene, shot, step = ctx
-        fields['Sequence'] = scene
-        fields['Shot'] = shot
-        fields['Step'] = step
+        # ctx = item.properties["ctx"]
+        # scene, shot, step = ctx
+        # fields['Sequence'] = scene
+        # fields['Shot'] = shot
+        # fields['Step'] = step
         # published_name
-
-        fields['version'] = 0
+        ctx = unreal_utils.ctx_from_context(item.context)
+        if ctx:
+            scene, shot, step = ctx
+            fields['Sequence'] = scene
+            fields['Shot'] = shot
+            fields['Step'] = step
 
         # Stash the Unrea asset path and name in properties
         item.properties["actor"] = actor
@@ -365,6 +369,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # Get destination path for exported FBX from publish template
         # which should be project root + publish template
+        fields['version'] = 0
         publish_path = publish_template.apply_fields(fields)
 
         published_name = os.path.basename(publish_path).replace(".v000", "")

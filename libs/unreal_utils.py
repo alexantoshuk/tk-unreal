@@ -1,7 +1,74 @@
 import unreal
 import os
+import glob
+import subprocess
 
 SHOT_SEQUENCE_START = 1001
+PROJECT_ROOT = os.path.normpath(unreal.SystemLibrary.get_project_directory())
+
+
+def tk_root(ctx):
+    root = os.path.dirname(ctx.sgtk.roots.get('primary'))
+    return os.path.join(root, 'playsense-cgi-tk')
+
+
+def ffmpeg_path(ctx):
+    ffmpeg = os.path.join(tk_root(ctx), 'app', 'Windows', 'ffmpeg', 'bin', 'ffmpeg.exe')
+    unreal.log(f"FFmpeg Path: {ffmpeg}")
+    return ffmpeg
+
+
+def convert_mov_to_mp4(ctx, src, dst):
+    commands = [
+        ffmpeg_path(ctx),
+        "-i",
+        src,
+        "-vcodec",
+        "libx264",
+        "-acodec",
+        "libfaac",
+        "-pix_fmt",
+        "yuv420p",
+        dst,
+    ]
+
+    if subprocess.run(commands).returncode == 0:
+        print("FFmpeg Script Ran Successfully")
+        return True
+    else:
+        print("There was an error running your FFmpeg script")
+        return False
+
+
+def last_versions(filenames, pattern="???.mov"):
+    _filenames = set(f[:-len(pattern)] + pattern for f in filenames)
+    files = []
+    for f in _filenames:
+        l = sorted(glob.iglob(f))
+        if not l:
+            continue
+        files.append(l[-1])
+
+    return files
+
+
+def cleanup_versions(filepath, pattern="???.abc", max_versions=5, logger=None):
+    # limit number of versions to max_versions
+    if max_versions <= 0:
+        return
+
+    pattern = filepath[:-len(pattern)] + pattern
+    files = []
+    for f in sorted(glob.iglob(pattern))[:-max_versions]:
+        try:
+            os.remove(f)
+            files.append()
+            if logger:
+                logger.info(
+                    "Remove '{0}' because of version limit = {1}".format(f, max_versions))
+        except:
+            if logger:
+                logger.info("Can't remove '{0}'".format(f))
 
 
 def find_track(sequence, track_name):
@@ -45,33 +112,33 @@ def find_actor_sequence_binding(seq, actor_name):
     return walk(seq)
 
 
-def get_version(name):
-    name, ok, ver = name.rpartition(' v')
-    if not ok:
-        return 0
-    try:
-        return int(ver)
-    except:
-        return None
+# def get_version(name):
+#     name, ok, ver = name.rpartition(' v')
+#     if not ok:
+#         return 0
+#     try:
+#         return int(ver)
+#     except:
+#         return None
 
 
-def set_version(name, ver):
-    _name, ok, _ = name.rpartition(' v')
-    if ok:
-        return f"{_name} v{int(ver)}"
-    return f"{name} v{int(ver)}"
+# def set_version(name, ver):
+#     _name, ok, _ = name.rpartition(' v')
+#     if ok:
+#         return f"{_name} v{int(ver)}"
+#     return f"{name} v{int(ver)}"
 
 
-def up_version(name):
-    _name, ok, ver = name.rpartition(' v')
-    if not ok:
-        ver = 0
-    else:
-        ver = int(ver)
-        name = _name
+# def up_version(name):
+#     _name, ok, ver = name.rpartition(' v')
+#     if not ok:
+#         ver = 0
+#     else:
+#         ver = int(ver)
+#         name = _name
 
-    ver += 1
-    return f"{name} v{ver}"
+#     ver += 1
+#     return f"{name} v{ver}"
 
 
 def ctx_from_asset_path(path):
@@ -99,7 +166,22 @@ def ctx_from_shot_path(path):
     return None
 
 
-def ctx_from_actor_sequence(seq):
+def ctx_from_movie_path(path):
+    base, ext = os.path.splitext(path)
+    if ext.lower() not in ('.mov', '.mp4'):
+        return
+
+    name = os.path.basename(path).split(".")[0]
+    splitted = name.split("_", 2)
+    if len(splitted) < 2:
+        return
+    splitted = splitted[:2]
+    scene = splitted[0]
+    shot = "_".join(splitted)
+    return scene, shot, "LGT"
+
+
+def ctx_from_sequence(seq):
     seq_name = seq.get_name()
     seq_name = seq_name.rstrip('_sub')
     l = seq_name.split('_')
@@ -110,13 +192,99 @@ def ctx_from_actor_sequence(seq):
     return scene, code, step
 
 
-def ctx_from_actor_level(level):
+def ctx_from_level(level):
     path = level.get_path_name()
     try:
         scene, code, step = path.split('/')[3:6]
         return scene, code, step
     except:
         return None
+
+
+def step_short_name2(step_id):
+    import sgtk
+    engine = sgtk.platform.current_engine()
+
+    data = engine.shotgun.find_one("Step", [
+        ["id", "is", step_id],
+    ],
+        fields=["short_name"]
+    )
+    if data:
+        return data["short_name"]
+
+
+def step_short_name(task_id):
+    import sgtk
+    engine = sgtk.platform.current_engine()
+    step = engine.shotgun.find_one("Task", [
+        ["id", "is", task_id],
+
+    ], ["step"])['step']
+
+    step_short_name = engine.shotgun.find_one("Step", [["id", "is", step['id']]], ["short_name"])["short_name"]
+    return step_short_name
+
+
+def sg_asset_type(asset_id):
+    import sgtk
+    engine = sgtk.platform.current_engine()
+    data = engine.shotgun.find_one("Asset", [
+        ["id", "is", asset_id],
+    ],
+        fields=["sg_asset_type"]
+    )
+    if data:
+        return data["sg_asset_type"]
+
+
+def ctx_from_context(context):
+    entity = context.entity
+    step = context.step
+    step_id = step["id"]
+
+    if (not entity) or (not step):
+        return
+    entity_type = entity.get("type")
+    if entity_type == "Shot":
+        shot = entity.get("code", entity.get("name"))
+        if not shot:
+            return
+        scene = shot.split("_", 1)[0]
+        step_shortname = step_short_name2(step_id)
+        return scene, shot, step_shortname
+
+    elif entity_type == "Asset":
+        asset = entity.get("code", entity.get("name"))
+        if not asset:
+            return
+        asset_type = sg_asset_type(entity["id"])
+        if not asset_type:
+            asset_type = "Prop"
+        step_shortname = step_short_name2(step_id)
+        if not step_shortname:
+            step_shortname = "MDL"
+        return asset_type, asset, step_shortname
+
+
+def last_published_info(ctx, published_name):
+    import sgtk
+    engine = sgtk.platform.current_engine()
+    d = ctx.to_dict()
+    project = d['project']
+    entity = d['entity']
+
+    data = engine.shotgun.find_one("PublishedFile", [
+        ["project", "is", project],
+        ["entity", "is", entity],
+        ["name", "is", published_name],
+    ],
+        fields=["version_number", "updated_at"],
+        order=[
+            {'field_name': 'version_number', 'direction': 'desc'},
+    ]
+    )
+    return data
 
 
 def last_published_version(ctx, published_name):
@@ -129,7 +297,7 @@ def last_published_version(ctx, published_name):
     data = engine.shotgun.find_one("PublishedFile", [
         ["project", "is", project],
         ["entity", "is", entity],
-        ["name", "is", published_name]
+        ["name", "is", published_name],
     ],
         fields=["version_number"],
         order=[
@@ -147,7 +315,7 @@ def create_asset_context(asset_type, asset, step):
     ctx = engine.context
     asset = engine.shotgun.find_one("Asset", [
         ["project", "is", ctx.project],
-        ["sg_asset_type", asset_type]
+        ["sg_asset_type", "is", asset_type],
         ["code", "is", asset],
     ])
     if not asset:
@@ -182,18 +350,6 @@ def create_shot_context(scene, shot, step):
         return
     ctx = engine.sgtk.context_from_entity("Task", task_data["id"])
     return ctx
-
-
-def step_short_name(task_id):
-    import sgtk
-    engine = sgtk.platform.current_engine()
-    step = engine.shotgun.find_one("Task", [
-        ["id", "is", task_id],
-
-    ], ["step"])['step']
-
-    step_short_name = engine.shotgun.find_one("Step", [["id", "is", step['id']]], ["short_name"])["short_name"]
-    return step_short_name
 
 
 def unreal_import_alembic_asset(input_path, destination_path, destination_name, automated=True, create_actor=False):

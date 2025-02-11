@@ -89,7 +89,10 @@ class UnrealSessionCollector(HookBaseClass):
 
         # Collect assets selected in Unreal
         self.collect_selected_assets(parent_item)
+        # Collect actors selected in Unreal
         self.collect_selected_actors(parent_item)
+        # Collect rendered movies
+        self.collect_rendered_movies(parent_item)
 
     def collect_current_session(self, settings, parent_item):
         """
@@ -146,6 +149,30 @@ class UnrealSessionCollector(HookBaseClass):
 
         return session_item
 
+    def collect_selected_assets(self, parent_item):
+        """
+        Creates items for assets selected in Unreal.
+
+        :param parent_item: Parent Item instance
+        """
+        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        sequence_edits = None
+        # Iterate through the selected assets and get their info and add them as items to be published
+        for asset in unreal_sg.selected_assets:
+            if asset.asset_class_path.asset_name == "LevelSequence":
+                if sequence_edits is None:
+                    sequence_edits = self.retrieve_sequence_edits()
+                self.collect_level_sequence(parent_item, asset, sequence_edits)
+            else:
+                self.create_asset_item(
+                    parent_item,
+                    # :class:`Name` instances, we cast them to strings otherwise
+                    # string operations fail down the line..
+                    "%s" % unreal_sg.object_path(asset),
+                    "%s" % asset.asset_class_path.asset_name,
+                    "%s" % asset.asset_name,
+                )
+
     def create_asset_item(self, parent_item, asset_path, asset_type, asset_name, display_name=None):
         """
         Create an unreal item under the given parent item.
@@ -168,72 +195,23 @@ class UnrealSessionCollector(HookBaseClass):
         if ctx:
             _type, code, step = ctx
             unreal.log(f"Determine SG Context items: ASSET_TYPE: {_type}, ASSET: {code}, PIPE_STEP: {step}")
-            try:
-                context = unreal_utils.create_asset_context(_type, code, step)
-            except:
+            context = unreal_utils.create_asset_context(_type, code, step)
+            if context:
+                unreal.log(f"Get SG Context from asset path: {context} {context.to_dict()} ")
+                asset_item.properties["context"] = context
+            else:
                 self.logger.error(f"Can't find task with step '{step}' for asset '{code}'")
-            unreal.log(f"Get SG Context from asset path: {context} {context.to_dict()} ")
-            asset_item.properties["context"] = context
+                asset_item.properties["context"] = asset_item.context
         else:
             unreal.log(f"SG Context: None")
             asset_item.properties["context"] = asset_item.context
 
-        asset_item.properties["ctx"] = ctx
+        # asset_item.properties["ctx"] = ctx
         # Set asset properties which can be used by publish plugins
         asset_item.properties["asset_path"] = asset_path
         asset_item.properties["asset_name"] = asset_name
         asset_item.properties["asset_type"] = asset_type
         return asset_item
-
-    def create_actor_item(self, parent_item, actor, actor_type, anim, actor_name, display_name=None):
-        """
-        Create an unreal item under the given parent item.
-
-        :param actor_path: The unreal actor path, as a string.
-        :param actor_type: The unreal actor type, as a string.
-        :param actor_name: The unreal actor name, as a string.
-        :param display_name: Optional display name for the item.
-        :returns: The created item.
-        """
-
-        item_type = "unreal.actor.%s" % actor_type
-        actor_item = parent_item.create_item(
-            item_type,  # Include the asset type for the publish plugin to use
-            actor_type,  # Display type
-            display_name or actor_name,  # Display name of item instance
-        )
-
-        ctx = None
-        if anim:
-            seq, _ = anim
-            ctx = unreal_utils.ctx_from_actor_sequence(seq)
-            unreal.log(f"Try to get SG Context from sequence name")
-        else:
-            lvl = actor.get_level()
-            ctx = unreal_utils.ctx_from_actor_level(lvl)
-            unreal.log(f"Try to get SG Context from level name")
-
-        if ctx:
-            scene, shot, step = ctx
-            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
-            context = unreal_utils.create_shot_context(scene, shot, step)
-            if not context:
-                self.logger.error(f"Can't find task with step '{step}' for shot '{shot}'")
-                return
-            unreal.log(f"SG Context: {context} {context.to_dict()} ")
-            actor_item.properties["context"] = context
-        else:
-            unreal.log(f"SG Context: None")
-            actor_item.properties["context"] = actor_item.context
-        actor_item.properties["ctx"] = ctx
-
-        # Set asset properties which can be used by publish plugins
-        actor_item.properties["actor"] = actor
-        actor_item.properties["actor_name"] = actor_name
-        actor_item.properties["actor_type"] = actor_type
-        actor_item.properties["anim"] = anim
-        # actor_item.properties["ctx"] = ctx
-        return actor_item
 
     def collect_selected_actors(self, parent_item):
         """
@@ -268,29 +246,122 @@ class UnrealSessionCollector(HookBaseClass):
                 display_name,
             )
 
-    def collect_selected_assets(self, parent_item):
+    def create_actor_item(self, parent_item, actor, actor_type, anim, actor_name, display_name=None):
         """
-        Creates items for assets selected in Unreal.
+        Create an unreal item under the given parent item.
+
+        :param actor_path: The unreal actor path, as a string.
+        :param actor_type: The unreal actor type, as a string.
+        :param actor_name: The unreal actor name, as a string.
+        :param display_name: Optional display name for the item.
+        :returns: The created item.
+        """
+
+        item_type = "unreal.actor.%s" % actor_type
+        actor_item = parent_item.create_item(
+            item_type,  # Include the asset type for the publish plugin to use
+            actor_type,  # Display type
+            display_name or actor_name,  # Display name of item instance
+        )
+
+        ctx = None
+        if anim:
+            seq, _ = anim
+            ctx = unreal_utils.ctx_from_sequence(seq)
+            unreal.log(f"Try to get SG Context from sequence name")
+        else:
+            lvl = actor.get_level()
+            ctx = unreal_utils.ctx_from_level(lvl)
+            unreal.log(f"Try to get SG Context from level name")
+
+        if ctx:
+            scene, shot, step = ctx
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
+            context = unreal_utils.create_shot_context(scene, shot, step)
+            if context:
+                unreal.log(f"SG Context: {context} {context.to_dict()} ")
+                actor_item.properties["context"] = context
+            else:
+                self.logger.error(f"Can't find task with step '{step}' for shot '{shot}'")
+                actor_item.properties["context"] = actor_item.context
+        else:
+            unreal.log(f"SG Context: None")
+            actor_item.properties["context"] = actor_item.context
+        # actor_item.properties["ctx"] = ctx
+
+        # Set asset properties which can be used by publish plugins
+        actor_item.properties["actor"] = actor
+        actor_item.properties["actor_name"] = actor_name
+        actor_item.properties["actor_type"] = actor_type
+        actor_item.properties["anim"] = anim
+
+        return actor_item
+
+    def collect_rendered_movies(self, parent_item):
+        """
+        Creates items for found rendered movies.
 
         :param parent_item: Parent Item instance
         """
-        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
-        sequence_edits = None
-        # Iterate through the selected assets and get their info and add them as items to be published
-        for asset in unreal_sg.selected_assets:
-            if asset.asset_class_path.asset_name == "LevelSequence":
-                if sequence_edits is None:
-                    sequence_edits = self.retrieve_sequence_edits()
-                self.collect_level_sequence(parent_item, asset, sequence_edits)
-            else:
-                self.create_asset_item(
-                    parent_item,
-                    # :class:`Name` instances, we cast them to strings otherwise
-                    # string operations fail down the line..
-                    "%s" % unreal_sg.object_path(asset),
-                    "%s" % asset.asset_class_path.asset_name,
-                    "%s" % asset.asset_name,
+
+        movies_dir = os.path.join(unreal_utils.PROJECT_ROOT, "render")
+        for (dirpath, dirnames, filenames) in os.walk(movies_dir):
+            # filenames = (os.path.join(dirpath, f) for f in filenames)
+            # for f in unreal_utils.last_versions(filenames):
+            for f in filenames:
+                filename = os.path.join(dirpath, f)
+                self.create_rendered_movie_item(parent_item, filename)
+            break
+
+    def create_rendered_movie_item(self, parent_item, movie_path, display_name=None):
+        """
+        Create an unreal item under the given parent item.
+
+        :param asset_path: The unreal asset path, as a string.
+        :param asset_type: The unreal asset type, as a string.
+        :param asset_name: The unreal asset name, as a string.
+        :param display_name: Optional display name for the item.
+        :returns: The created item.
+        """
+        asset_type = "Rendered Movie"
+        item_type = "unreal.render"
+        name = os.path.basename(movie_path)
+        if not display_name:
+            display_name = name
+
+        ctx = unreal_utils.ctx_from_movie_path(movie_path)
+
+        unreal.log(f"Try to get SG Context from movie path")
+        if ctx:
+            scene, shot, step = ctx
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
+
+            context = unreal_utils.create_shot_context(scene, shot, step)
+            if context:
+                unreal.log(f"Get SG Context from movie path: {context} {context.to_dict()} ")
+                mov_item = parent_item.create_item(
+                    item_type,  # Include the asset type for the publish plugin to use
+                    asset_type,  # Display type
+                    display_name,  # Display name of item instance
                 )
+                mov_item.properties["context"] = context
+            else:
+                unreal.log_error(f"Can't find task with step '{step}' for shot '{shot}'")
+                return
+
+        else:
+            unreal.log(f"SG Context: None")
+            return
+
+        name, ext = os.path.splitext(name)
+        mov_item.properties["movie_path"] = movie_path
+        mov_item.properties["name"] = name
+        # mov_item.properties["ctx"] = ctx
+        # Set asset properties which can be used by publish plugins
+        icon_path = os.path.join(self._icons_dir(), "movie.png")
+        mov_item.set_icon_from_path(icon_path)
+
+        return mov_item
 
     def get_all_paths_from_sequence(self, level_sequence, sequence_edits, visited=None):
         """
@@ -414,3 +485,6 @@ class UnrealSessionCollector(HookBaseClass):
                     except AttributeError:
                         pass
         return sequence_edits
+
+    def _icons_dir(self):
+        return os.path.join(self.disk_location, os.pardir, os.pardir, os.pardir, "icons")

@@ -3,15 +3,24 @@
 # file included in this repository.
 
 import sgtk
-import os
-import sys
 import unreal
+import shutil
+from tank_vendor import six
+
+import copy
 import datetime
+import os
+import pprint
+import subprocess
+import sys
+import tempfile
+
 
 from pathlib import Path
 libs_path = os.path.join(str(Path(__file__).parents[3]), 'libs')
 sys.path.insert(0, libs_path)
 import unreal_utils
+
 
 # Local storage path field for known Oses.
 _OS_LOCAL_STORAGE_PATH_FIELD = {
@@ -21,13 +30,12 @@ _OS_LOCAL_STORAGE_PATH_FIELD = {
     "linux2": "linux_path",
 }[sys.platform]
 
-
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
-class UnrealAssetPublishPlugin(HookBaseClass):
+class UnrealMoviePublishPlugin(HookBaseClass):
     """
-    Plugin for publishing an Unreal asset.
+    Plugin for publishing an Unreal sequence as a rendered movie file.
 
     This hook relies on functionality found in the base file publisher hook in
     the publish2 app and should inherit from it in the configuration. The hook
@@ -48,11 +56,16 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         contain simple html for formatting.
         """
 
-        return """Publishes the asset to Shotgun. A <b>Publish</b> entry will be
-        created in Shotgun which will include a reference to the exported asset's current
-        path on disk. Other users will be able to access the published file via
-        the <b>Loader</b> app so long as they have access to
-        the file's location on disk."""
+        return """Publishes the sequence as a rendered movie to Shotgun. A
+        <b>Publish</b> entry will be created in Shotgun which will include a
+        reference to the movie's current path on disk. A <b>Version</b> entry
+        will also be created in Shotgun with the movie file being uploaded
+        there. Other users will be able to review the movie in the browser or
+        in RV.
+        <br>
+        If available, the Movie Render Queue will be used for rendering,
+        the Level Sequencer will be used otherwise.
+        """
 
     @property
     def settings(self):
@@ -75,7 +88,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         """
 
         # inherit the settings from the base publish plugin
-        base_settings = super(UnrealAssetPublishPlugin, self).settings or {}
+        base_settings = super(UnrealMoviePublishPlugin, self).settings or {}
 
         # Here you can add any additional settings specific to this plugin
         publish_template_setting = {
@@ -86,11 +99,17 @@ class UnrealAssetPublishPlugin(HookBaseClass):
                                "correspond to a template defined in "
                                "templates.yml.",
             },
+            "Movie Render Queue Presets Path": {
+                "type": "string",
+                "default": None,
+                "description": "Optional Unreal Path to saved presets "
+                               "for rendering with the Movie Render Queue"
+            },
             "Publish Folder": {
                 "type": "string",
                 "default": None,
                 "description": "Optional folder to use as a root for publishes"
-            },
+            }
         }
 
         # update the base settings
@@ -107,15 +126,15 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         accept() method. Strings can contain glob patters such as *, for example
         ["maya.*", "file.maya"]
         """
-        return ["unreal.asset.StaticMesh"]
+        return ["unreal.render"]
 
     def create_settings_widget(self, parent):
         """
         Creates a Qt widget, for the supplied parent widget (a container widget
         on the right side of the publish UI).
 
-        :param parent: The parent to use for the widget being created.
-        :returns: A :class:`QtGui.QFrame` that displays editable widgets for
+        :param parent: The parent to use for the widget being created
+        :return: A :class:`QtGui.QFrame` that displays editable widgets for
                  modifying the plugin's settings.
         """
         # defer Qt-related imports
@@ -134,6 +153,13 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         settings_frame.description_label.setTextFormat(QtCore.Qt.RichText)
 
         # Unreal setttings
+        settings_frame.unreal_render_presets_label = QtGui.QLabel("Render with Movie Pipeline Presets:")
+        settings_frame.unreal_render_presets_widget = QtGui.QComboBox()
+        settings_frame.unreal_render_presets_widget.addItem("No presets")
+        presets_folder = unreal.MovieRenderPipelineProjectSettings().preset_save_dir
+        for preset in unreal.EditorAssetLibrary.list_assets(presets_folder.path):
+            settings_frame.unreal_render_presets_widget.addItem(preset.split(".")[0])
+
         settings_frame.unreal_publish_folder_label = QtGui.QLabel("Publish folder:")
         storage_roots = self.parent.shotgun.find(
             "LocalStorage",
@@ -154,6 +180,8 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # Create the layout to use within the QFrame
         settings_layout = QtGui.QVBoxLayout()
         settings_layout.addWidget(settings_frame.description_label)
+        settings_layout.addWidget(settings_frame.unreal_render_presets_label)
+        settings_layout.addWidget(settings_frame.unreal_render_presets_widget)
         settings_layout.addWidget(settings_frame.unreal_publish_folder_label)
         settings_layout.addWidget(settings_frame.storage_roots_widget)
 
@@ -174,6 +202,9 @@ class UnrealAssetPublishPlugin(HookBaseClass):
 
         # Please note that we don't have to return all settings here, just the
         # settings which are editable in the UI.
+        render_presets_path = None
+        if widget.unreal_render_presets_widget.currentIndex() > 0:  # First entry is "No Presets"
+            render_presets_path = six.ensure_str(widget.unreal_render_presets_widget.currentText())
         storage_index = widget.storage_roots_widget.currentIndex()
         publish_folder = None
         if storage_index > 0:  # Something selected and not the first entry
@@ -181,6 +212,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             publish_folder = storage[_OS_LOCAL_STORAGE_PATH_FIELD]
 
         settings = {
+            "Movie Render Queue Presets Path": render_presets_path,
             "Publish Folder": publish_folder,
         }
         return settings
@@ -201,6 +233,12 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             # We do not allow editing multiple items
             raise NotImplementedError
         cur_settings = settings[0]
+        render_presets_path = cur_settings["Movie Render Queue Presets Path"]
+        preset_index = 0
+        if render_presets_path:
+            preset_index = widget.unreal_render_presets_widget.findText(render_presets_path)
+            self.logger.info("Index for %s is %s" % (render_presets_path, preset_index))
+        widget.unreal_render_presets_widget.setCurrentIndex(preset_index)
         # Note: the template is validated in the accept method, no need to check it here.
         publish_template_setting = cur_settings.get("Publish Template")
         publisher = self.parent
@@ -232,12 +270,18 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         settings_manager = module.UserSettings(self.parent)
 
         # Retrieve saved settings
+        settings["Movie Render Queue Presets Path"].value = settings_manager.retrieve(
+            "publish2.movie_render_queue_presets_path",
+            settings["Movie Render Queue Presets Path"].value,
+            settings_manager.SCOPE_PROJECT,
+        )
         settings["Publish Folder"].value = settings_manager.retrieve(
             "publish2.publish_folder",
             settings["Publish Folder"].value,
             settings_manager.SCOPE_PROJECT
         )
         self.logger.debug("Loaded settings %s" % settings["Publish Folder"])
+        self.logger.debug("Loaded settings %s" % settings["Movie Render Queue Presets Path"])
 
     def save_ui_settings(self, settings):
         """
@@ -251,6 +295,8 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         settings_manager = module.UserSettings(self.parent)
 
         # Save settings
+        render_presets_path = settings["Movie Render Queue Presets Path"].value
+        settings_manager.store("publish2.movie_render_queue_presets_path", render_presets_path, settings_manager.SCOPE_PROJECT)
         publish_folder = settings["Publish Folder"].value
         settings_manager.store("publish2.publish_folder", publish_folder, settings_manager.SCOPE_PROJECT)
 
@@ -281,6 +327,16 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         """
 
         accepted = True
+        checked = True
+
+        if sys.platform != "win32":
+            self.logger.warning(
+                "Movie publishing is not supported on other platforms than Windows..."
+            )
+            return {
+                "accepted": False,
+            }
+
         publisher = self.parent
 
         item.context = item.properties["context"]
@@ -291,7 +347,7 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         if not publish_template:
             self.logger.debug(
                 "A publish template could not be determined for the "
-                "asset item. Not accepting the item."
+                "item. Not accepting the item."
             )
             accepted = False
 
@@ -300,9 +356,52 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         item.properties["publish_template"] = publish_template
 
         self.load_saved_ui_settings(settings)
+
+        movie_path = item.properties.get("movie_path")
+
+        name = item.properties.get("name")
+
+        publish_template = item.properties["publish_template"]
+
+        fields = {"name": name}
+
+        ctx = unreal_utils.ctx_from_context(item.context)
+        if ctx:
+            scene, shot, step = ctx
+            fields['Sequence'] = scene
+            fields['Shot'] = shot
+            fields['Step'] = step
+        # published_name
+
+        # Get destination path for exported FBX from publish template
+        # which should be project root + publish template
+        fields['version'] = 0
+        publish_path = publish_template.apply_fields(fields)
+
+        published_name = os.path.basename(publish_path).replace(".v000", "")
+        info = unreal_utils.last_published_info(item.context, published_name)
+
+        if info:
+            updated_at = info.get("updated_at")
+            if os.path.getmtime(movie_path) < updated_at.timestamp():
+                accepted = False
+                return {
+                    "accepted": accepted,
+                    "checked": checked
+                }
+            version = info.get("version_number")
+            fields['version'] = version + 1
+            publish_path = publish_template.apply_fields(fields)
+
+        publish_path = os.path.normpath(publish_path)
+
+        item.properties["publish_path"] = publish_path
+        item.properties["path"] = publish_path
+        item.properties["publish_type"] = "Unreal Render"
+
         return {
             "accepted": accepted,
-            "checked": True
+            "checked": checked
         }
 
     def validate(self, settings, item):
@@ -316,86 +415,11 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         :param item: Item to process
         :returns: True if item is valid, False otherwise.
         """
-        # raise an exception here if something is not valid.
-        # If you use the logger, warnings will appear in the validation tree.
-        # You can attach callbacks that allow users to fix these warnings
-        # at the press of a button.
-        #
-        # For example:
-        #
-        # self.logger.info(
-        #         "Your session is not part of a maya project.",
-        #         extra={
-        #             "action_button": {
-        #                 "label": "Set Project",
-        #                 "tooltip": "Set the maya project",
-        #                 "callback": lambda: mel.eval('setProject ""')
-        #             }
-        #         }
-        #     )
-
-        asset_path = item.properties.get("asset_path")
-        asset_name = item.properties.get("asset_name")
-        if not asset_path or not asset_name:
-            self.logger.debug("Asset path or name not configured.")
+        movie_path = item.properties.get("movie_path")
+        if not os.path.isfile(movie_path):
+            self.logger.debug(f"The rendered movie '{movie_path}' is not exists")
             return False
 
-        publish_template = item.properties["publish_template"]
-
-        # Add the Unreal asset name to the fields
-        fields = {"name": asset_name}
-
-        # Add today's date to the fields
-        # ctx = item.properties["ctx"]
-
-        # _type, code, step = ctx
-        # fields['sg_asset_type'] = _type
-        # fields['Asset'] = code
-        # fields['Step'] = step
-
-        ctx = unreal_utils.ctx_from_context(item.context)
-        if ctx:
-            _type, code, step = ctx
-            fields['sg_asset_type'] = _type
-            fields['Asset'] = code
-            fields['Step'] = step
-
-        # Stash the Unrea asset path and name in properties
-        item.properties["asset_path"] = asset_path
-        item.properties["asset_name"] = asset_name
-
-        # Get destination path for exported FBX from publish template
-        # which should be project root + publish template
-
-        fields['version'] = 0
-        publish_path = publish_template.apply_fields(fields)
-
-        published_name = os.path.basename(publish_path).replace(".v000", "")
-        version = unreal_utils.last_published_version(item.context, published_name)
-        if version is not None:
-            fields['version'] = version + 1
-            publish_path = publish_template.apply_fields(fields)
-
-        publish_path = os.path.normpath(publish_path)
-        if not os.path.isabs(publish_path):
-            # If the path is not absolute, prepend the publish folder setting.
-            publish_folder = settings["Publish Folder"].value
-            if not publish_folder:
-                publish_folder = unreal.Paths.project_saved_dir()
-            publish_path = os.path.abspath(
-                os.path.join(
-                    publish_folder,
-                    publish_path
-                )
-            )
-        item.properties["publish_path"] = publish_path
-        item.properties["path"] = publish_path
-
-        # Set the Published File Type
-        item.properties["publish_type"] = "FBX"
-
-        # run the base class validation
-        # return super(UnrealAssetPublishPlugin, self).validate(settings, item)
         self.save_ui_settings(settings)
         return True
 
@@ -416,23 +440,76 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # get the path in a normalized state. no trailing separator, separators
         # are appropriate for current os, no double separators, etc.
 
-        # Ensure that the destination path exists before exporting since the
-        # Unreal FBX exporter doesn't check that
-        filename = item.properties["path"]
-        self.parent.ensure_folder_exists(os.path.dirname(filename))
-
-        # Export the asset from Unreal
-        asset_path = item.properties["asset_path"]
-        asset_name = item.properties["asset_name"]
-        try:
-            _unreal_export_asset_to_fbx(filename, asset_path, asset_name)
-        except Exception:
-            self.logger.debug("Asset %s cannot be exported to FBX." % (asset_path))
-
         # let the base class register the publish
-        # the publish_file will copy the file from the work path to the publish path
-        # if the item is provided with the worK_template and publish_template properties
-        super(UnrealAssetPublishPlugin, self).publish(settings, item)
+
+        publish_path = os.path.normpath(item.properties["publish_path"])
+
+        # Split the destination path into folder and filename
+        destination_folder, movie_name = os.path.split(publish_path)
+        movie_name = os.path.splitext(movie_name)[0]
+
+        # Ensure that the destination path exists before rendering the sequence
+        self.parent.ensure_folder_exists(destination_folder)
+        unreal_utils.convert_mov_to_mp4(item.context, item.properties.get("movie_path"), item.properties.get("publish_path"))
+
+        # Publish the movie file to Shotgun
+        super(UnrealMoviePublishPlugin, self).publish(settings, item)
+
+        # Create a Version entry linked with the new publish
+        # Populate the version data to send to SG
+        self.logger.info("Creating Version...")
+        version_data = {
+            "project": item.context.project,
+            "code": movie_name,
+            "description": item.description,
+            "entity": self._get_version_entity(item),
+            "sg_path_to_movie": publish_path,
+            "sg_task": item.context.task
+        }
+
+        publish_data = item.properties.get("sg_publish_data")
+
+        # If the file was published, add the publish data to the version
+        if publish_data:
+            version_data["published_files"] = [publish_data]
+
+        # Log the version data for debugging
+        self.logger.debug(
+            "Populated Version data...",
+            extra={
+                "action_show_more_info": {
+                    "label": "Version Data",
+                    "tooltip": "Show the complete Version data dictionary",
+                    "text": "<pre>%s</pre>" % (
+                        pprint.pformat(version_data),
+                    )
+                }
+            }
+        )
+
+        # Create the version
+        self.logger.info("Creating version for review...")
+        version = self.parent.shotgun.create("Version", version_data)
+
+        # Stash the version info in the item just in case
+        item.properties["sg_version_data"] = version
+
+        # On windows, ensure the path is utf-8 encoded to avoid issues with
+        # the shotgun api
+        upload_path = str(item.properties.get("publish_path"))
+        unreal.log("Upload_path: {}".format(upload_path))
+
+        # Upload the file to SG
+        self.logger.info("Uploading content...")
+        self.parent.shotgun.upload(
+            "Version",
+            version["id"],
+            upload_path,
+            "sg_uploaded_movie"
+        )
+        self.logger.info("Upload complete!")
+
+        shutil.copy2(item.properties.get("movie_path"), os.path.dirname(item.properties.get("publish_path")))
 
     def finalize(self, settings, item):
         """
@@ -446,62 +523,17 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         """
         # do the base class finalization
         try:
-            super(UnrealAssetPublishPlugin, self).finalize(settings, item)
+            super(UnrealMoviePublishPlugin, self).finalize(settings, item)
         except:
-            pass  # !FIXME: Raise exception when publish to tot assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
+            pass
 
-
-def _unreal_export_asset_to_fbx(filename, asset_path, asset_name):
-    """
-    Export an asset to FBX from Unreal
-
-    :param filename: The path where the exported FBX will be placed
-    :param asset_path: The Unreal asset to export to FBX
-    :param asset_name: The asset name to use for the FBX filename
-    """
-    # Get an export task
-    task = _generate_fbx_export_task(filename, asset_path, asset_name)
-    if not task:
-        return False, None
-
-    # Do the FBX export
-    result = unreal.Exporter.run_asset_export_task(task)
-
-    if not result:
-        unreal.log_error("Failed to export {}".format(task.filename))
-        for error_msg in task.errors:
-            unreal.log_error("{}".format(error_msg))
-
-        return result, None
-
-    return result, task.filename
-
-
-def _generate_fbx_export_task(filename, asset_path, asset_name):
-
-    loaded_asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-
-    if not loaded_asset:
-        unreal.log_error("Failed to create FBX export task for {}: Could not load asset {}".format(asset_name, asset_path))
-        return None
-
-    # Setup AssetExportTask for non-interactive mode
-    task = unreal.AssetExportTask()
-    task.object = loaded_asset      # the asset to export
-    task.filename = filename        # the filename to export as
-    task.automated = True           # don't display the export options dialog
-    task.replace_identical = True   # always overwrite the output
-
-    # Setup export options for the export task
-    task.options = unreal.FbxExportOption()
-    # These are the default options for the FBX export
-    # task.options.fbx_export_compatibility = fbx_2013
-    # task.options.ascii = False
-    # task.options.force_front_x_axis = False
-    # task.options.vertex_color = True
-    # task.options.level_of_detail = True
-    # task.options.collision = True
-    # task.options.welded_vertices = True
-    # task.options.map_skeletal_motion_to_root = False
-
-    return task
+    def _get_version_entity(self, item):
+        """
+        Returns the best entity to link the version to.
+        """
+        if item.context.entity:
+            return item.context.entity
+        elif item.context.project:
+            return item.context.project
+        else:
+            return None
