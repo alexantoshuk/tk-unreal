@@ -25,7 +25,7 @@ _OS_LOCAL_STORAGE_PATH_FIELD = {
 HookBaseClass = sgtk.get_hook_baseclass()
 
 
-class UnrealActorPublishPlugin(HookBaseClass):
+class UnrealFolderPublishPlugin(HookBaseClass):
     """
     Plugin for publishing an Unreal asset.
 
@@ -75,7 +75,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         """
 
         # inherit the settings from the base publish plugin
-        base_settings = super(UnrealActorPublishPlugin, self).settings or {}
+        base_settings = super(UnrealFolderPublishPlugin, self).settings or {}
 
         # Here you can add any additional settings specific to this plugin
         publish_template_setting = {
@@ -107,7 +107,7 @@ class UnrealActorPublishPlugin(HookBaseClass):
         accept() method. Strings can contain glob patters such as *, for example
         ["maya.*", "file.maya"]
         """
-        return ["unreal.actor.*"]
+        return ["unreal.movie_scene_folder"]
 
     def create_settings_widget(self, parent):
         """
@@ -334,16 +334,16 @@ class UnrealActorPublishPlugin(HookBaseClass):
         #         }
         #     )
 
-        actor = item.properties.get("actor")
-        actor_name = item.properties.get("actor_name")
-        if not actor or not actor_name:
+        bindings = item.properties.get("bindings")
+        folder_name = item.properties.get("folder_name")
+        if not bindings or not folder_name:
             self.logger.debug("Actor or name not configured.")
             return False
 
         publish_template = item.properties["publish_template"]
 
         # Add the Unreal asset name to the fields
-        fields = {"name": actor_name}
+        fields = {"name": folder_name}
 
         # Add today's date to the fields
         # date = datetime.date.today()
@@ -362,10 +362,6 @@ class UnrealActorPublishPlugin(HookBaseClass):
             fields['Sequence'] = scene
             fields['Shot'] = shot
             fields['Step'] = step
-
-        # Stash the Unrea asset path and name in properties
-        item.properties["actor"] = actor
-        item.properties["actor_name"] = actor_name
 
         # Get destination path for exported FBX from publish template
         # which should be project root + publish template
@@ -396,14 +392,12 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # Set the Published File Type
         publish_type = "FBX"
-        if "camera" in actor_name.lower():
-            publish_type = "FBX Camera"
         item.properties["publish_type"] = publish_type
 
         # item.properties["publish_version"] = 10
 
         # run the base class validation
-        # return super(UnrealActorPublishPlugin, self).validate(settings, item)
+        # return super(UnrealFolderPublishPlugin, self).validate(settings, item)
         self.save_ui_settings(settings)
         return True
 
@@ -430,24 +424,14 @@ class UnrealActorPublishPlugin(HookBaseClass):
         self.parent.ensure_folder_exists(os.path.dirname(filename))
 
         # Export the asset from Unreal
-        actor = item.properties["actor"]
-        actor_name = item.properties["actor_name"]
-        binding = item.properties["binding"]
-        if not binding:
-            try:
-                _unreal_export_actor_to_fbx(filename, actor)
-            except Exception:
-                self.logger.debug("Actor %s cannot be exported to FBX." % (actor))
-        else:
-            try:
-                _unreal_export_anim_actor_to_fbx(filename, binding)
-            except Exception:
-                self.logger.debug("Animated actor %s cannot be exported to FBX." % (actor))
+
+        bindings = item.properties["bindings"]
+        _unreal_export_actors_to_fbx(filename, bindings)
 
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path
         # if the item is provided with the worK_template and publish_template properties
-        super(UnrealActorPublishPlugin, self).publish(settings, item)
+        super(UnrealFolderPublishPlugin, self).publish(settings, item)
 
     def finalize(self, settings, item):
         """
@@ -461,17 +445,17 @@ class UnrealActorPublishPlugin(HookBaseClass):
         """
         # do the base class finalization
         try:
-            super(UnrealActorPublishPlugin, self).finalize(settings, item)
+            super(UnrealFolderPublishPlugin, self).finalize(settings, item)
         except:
             pass  # !FIXME: Raise exception when publish to not assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
 
 
-def _unreal_export_anim_actor_to_fbx(filename, binding):
+def _unreal_export_actors_to_fbx(filename, bindings):
     """
     Export an actor to FBX from Unreal
     """
     # Get an export task
-    params = _generate_sequencer_export_fbx_params(filename, binding)
+    params = _generate_sequencer_export_fbx_params(filename, bindings)
     if not params:
         return False, None
 
@@ -484,14 +468,14 @@ def _unreal_export_anim_actor_to_fbx(filename, binding):
     return result, params.fbx_file_name
 
 
-def _generate_sequencer_export_fbx_params(filename, binding):
+def _generate_sequencer_export_fbx_params(filename, bindings):
     # Setup AssetExportTask for non-interactive mode
     params = unreal.SequencerExportFBXParams()
     params.world = unreal.get_editor_subsystem(
         unreal.UnrealEditorSubsystem
     ).get_editor_world()
-    params.sequence = binding.sequence
-    params.bindings = [binding]
+    params.sequence = bindings[0].sequence
+    params.bindings = bindings
     params.fbx_file_name = filename        # the filename to export as
 
     # Setup export options for the export task
@@ -505,61 +489,8 @@ def _generate_sequencer_export_fbx_params(filename, binding):
     # params.override_options.force_front_x_axis = False
     # params.override_options.vertex_color = True
     # params.override_options.level_of_detail = True
-    # params.override_options.collision = True
+
     # params.override_options.welded_vertices = True
     # params.override_options.map_skeletal_motion_to_root = False
 
     return params
-
-
-def _unreal_export_actor_to_fbx(filename, actor):
-    """
-    Export an asset to FBX from Unreal
-
-    :param destination_path: The path where the exported FBX will be placed
-    :param actor: The Unreal actor to export to FBX
-    """
-    # Get an export task
-    task = _generate_fbx_export_task(filename, actor)
-    if not task:
-        return False, None
-
-    # Do the FBX export
-    result = unreal.Exporter.run_asset_export_task(task)
-
-    if not result:
-        unreal.log_error("Failed to export {}".format(task.filename))
-        for error_msg in task.errors:
-            unreal.log_error("{}".format(error_msg))
-
-        return result, None
-
-    return result, task.filename
-
-
-def _generate_fbx_export_task(filename, actor):
-
-    # filename = os.path.join(destination_path, actor_name + ".fbx")
-
-    # Setup AssetExportTask for non-interactive mode
-    task = unreal.AssetExportTask()
-    task.object = actor.get_world()      # the asset to export
-    task.filename = filename        # the filename to export as
-    task.automated = False           # don't display the export options dialog
-    task.replace_identical = True   # always overwrite the output
-
-    # Setup export options for the export task
-    task.options = unreal.FbxExportOption()
-    task.options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    task.options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    task.options.collision = False
-    # These are the default options for the FBX export
-    # task.options.fbx_export_compatibility = fbx_2013
-    # task.options.ascii = False
-    # task.options.force_front_x_axis = False
-    # task.options.vertex_color = True
-    # task.options.level_of_detail = True
-    # task.options.welded_vertices = True
-    # task.options.map_skeletal_motion_to_root = False
-
-    return task

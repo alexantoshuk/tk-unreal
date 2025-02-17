@@ -106,14 +106,14 @@ def find_actor_sequence_binding(seq, actor_name):
         for b in seq.get_bindings():
             # unreal.log(f"NAME: {b.get_name()}  {actor_name}")
             if b.get_name() == actor_name:
-                return (seq, b)
+                return b
 
         for track in seq.get_tracks():
             for section in track.get_sections():
                 try:
-                    res = walk(section.get_sequence())
-                    if res:
-                        return res
+                    b = walk(section.get_sequence())
+                    if b:
+                        return b
                 except:
                     pass
     return walk(seq)
@@ -472,8 +472,8 @@ def unreal_import_fbx_camera(input_path, destination_path, destination_name):
     unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
     seq = unreal.load_asset(f"{destination_path}/{seq_name}")
 
-    seq, binding = find_actor_sequence_binding(seq, cam_name)
-
+    binding = find_actor_sequence_binding(seq, cam_name)
+    seq = binding.sequence
     import_setting = unreal.MovieSceneUserImportFBXSettings()
     import_setting.set_editor_property('create_cameras', False)
     import_setting.set_editor_property('force_front_x_axis', False)

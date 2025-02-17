@@ -87,7 +87,13 @@ class UnrealSessionCollector(HookBaseClass):
         # Create an item representing the current Unreal session
         parent_item = self.collect_current_session(settings, parent_item)
 
-        if self.collect_selected_assets(parent_item) == 0 and self.collect_selected_actors(parent_item) == 0:
+        actors = folders = None
+        assets = self.collect_selected_assets(parent_item)
+        if not assets:
+            actors = self.collect_selected_actors(parent_item)
+            folders = self.collect_selected_movie_scene_folders(parent_item)
+
+        if (not assets) and (not actors) and (not folders):
             self.collect_rendered_movies(parent_item)
 
     def collect_current_session(self, settings, parent_item):
@@ -231,9 +237,9 @@ class UnrealSessionCollector(HookBaseClass):
         n = 0
         for actor in selected_actors:
             display_name = actor_name = actor.get_actor_label()
-            anim = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
-            if anim:
-                seq, binding = anim
+            binding = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
+            if binding:
+                seq = binding.sequence
                 display_name = f"{actor_name}\n({seq.get_name()})"
 
             if self.create_actor_item(
@@ -242,14 +248,14 @@ class UnrealSessionCollector(HookBaseClass):
                 # string operations fail down the line..
                 actor,
                 "%s" % actor.get_class().get_name(),
-                anim,
+                binding,
                 "%s" % actor_name,
                 display_name,
             ):
                 n += 1
         return n
 
-    def create_actor_item(self, parent_item, actor, actor_type, anim, actor_name, display_name=None):
+    def create_actor_item(self, parent_item, actor, actor_type, binding, actor_name, display_name=None):
         """
         Create an unreal item under the given parent item.
 
@@ -268,9 +274,8 @@ class UnrealSessionCollector(HookBaseClass):
         )
 
         ctx = None
-        if anim:
-            seq, _ = anim
-            ctx = unreal_utils.ctx_from_sequence(seq)
+        if binding:
+            ctx = unreal_utils.ctx_from_sequence(binding.sequence)
             unreal.log(f"Try to get SG Context from sequence name")
         else:
             lvl = actor.get_level()
@@ -296,9 +301,72 @@ class UnrealSessionCollector(HookBaseClass):
         actor_item.properties["actor"] = actor
         actor_item.properties["actor_name"] = actor_name
         actor_item.properties["actor_type"] = actor_type
-        actor_item.properties["anim"] = anim
+        actor_item.properties["binding"] = binding
 
         return actor_item
+
+    def collect_selected_movie_scene_folders(self, parent_item):
+        """
+        Creates items for all actors found in selected movie scene folders.
+        Actors in one folder will be exported to one FBX with folder's name.
+        :param parent_item: Parent Item instance
+        """
+        unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
+        if unreal_sg.selected_assets:
+            return
+
+        sel_folders = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_folders()
+        n = 0
+        for folder in sel_folders:
+            display_name = folder_name = folder.get_folder_name()
+
+            if self.create_movie_scene_folder_item(
+                parent_item,
+                folder,
+                "%s" % folder_name,
+                display_name,
+            ):
+                n += 1
+        return n
+
+    def create_movie_scene_folder_item(self, parent_item, folder, folder_name, display_name=None):
+        """
+        """
+        bindings = folder.get_child_object_bindings()
+        if not bindings:
+            return
+        item_type = "unreal.movie_scene_folder"
+        folder_item = parent_item.create_item(
+            item_type,  # Include the asset type for the publish plugin to use
+            "MovieSceneFolder",  # Display type
+            display_name or folder_name,  # Display name of item instance
+        )
+        ctx = None
+
+        for binding in bindings:
+            if not ctx:
+                ctx = unreal_utils.ctx_from_sequence(binding.sequence)
+                unreal.log(f"Try to get SG Context from sequence name")
+
+        if ctx:
+            scene, shot, step = ctx
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
+            context = unreal_utils.create_shot_context(scene, shot, step)
+            if context:
+                unreal.log(f"SG Context: {context} {context.to_dict()} ")
+                folder_item.properties["context"] = context
+            else:
+                self.logger.error(f"Can't find task with step '{step}' for shot '{shot}'")
+                folder_item.properties["context"] = folder_item.context
+        else:
+            unreal.log(f"SG Context: None")
+            folder_item.properties["context"] = folder_item.context
+
+        folder_item.properties["bindings"] = bindings
+        folder_item.properties["folder_name"] = folder_name
+        icon_path = os.path.join(self._icons_dir(), "folder.png")
+        folder_item.set_icon_from_path(icon_path)
+        return folder_item
 
     def collect_rendered_movies(self, parent_item):
         """

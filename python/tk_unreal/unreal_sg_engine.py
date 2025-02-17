@@ -103,6 +103,7 @@ class ShotgunEngineWrapper(UESGEngine):
         unreal.log("execute_command called for {0}".format(command_name))
         if command_name == "Publish rendered movies...":
             unreal.EditorActorSubsystem().select_nothing()
+            unreal.LevelSequenceEditorBlueprintLibrary.empty_selection()
             command_name = "Publish..."
 
         if command_name in engine.commands:
@@ -416,7 +417,8 @@ class ShotgunEngineWrapper(UESGEngine):
             has_selected_actors = len(self.get_selected_actors()) > 0
         except Exception:
             has_selected_actors = len(self.selected_actors) > 0
-        has_selection = len(self.selected_assets) > 0 or has_selected_actors
+        sel_movie_folders = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_folders()
+        has_selection = len(self.selected_assets) > 0 or has_selected_actors or len(sel_movie_folders) > 0
 
         if not has_selection:
             selected_actors = get_selected_actors()
