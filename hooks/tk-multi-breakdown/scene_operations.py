@@ -62,11 +62,11 @@ class BreakdownSceneOperations(Hook):
         unreal.log(f"Current SHOT: {path}")
 
         for asset_path in unreal.EditorAssetLibrary.list_assets(path):
-            unreal.log(f"Found asset: {asset_path}")
+            # unreal.log(f"Found asset: {asset_path}")
             scene_item_dict = self._build_scene_item_dict(asset_path)
             if not scene_item_dict:
                 continue
-            unreal.log(f"Accept item: {scene_item_dict}")
+            unreal.log(f"Accept item: '{asset_path}'  {scene_item_dict}")
             refs.append(scene_item_dict)
 
         return refs
@@ -102,12 +102,10 @@ class BreakdownSceneOperations(Hook):
             unreal.log_error(f"Can't get source file from asset: ", asset_path)
             return
 
-        # sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
-        # if not sgtk_path:
-        #     self.logger.debug("Asset `{}` does not have the tag `{}`".format(
-        #         asset.get_path_name(), source_path
-        #     ))
-        #     return None
+        sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
+        if not sgtk_path:
+            self.logger.debug(f"Asset `{asset.get_path_name()}` does not have the tag `{source_path}`")
+            return None
 
         scene_item_dict = {
             "node": asset.get_path_name(),
