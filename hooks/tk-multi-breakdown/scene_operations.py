@@ -105,7 +105,7 @@ class BreakdownSceneOperations(Hook):
 
         sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
         if not sgtk_path:
-            unreal.log_warning(f"Asset `{asset.get_path_name()}` does not have the tag `{source_path}`")
+            unreal.log_warning(f"Asset `{asset}` does not have the SG tag")
             return
 
         asset_path_name = str(asset.get_path_name())

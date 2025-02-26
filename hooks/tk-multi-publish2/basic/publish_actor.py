@@ -369,10 +369,10 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # Get destination path for exported FBX from publish template
         # which should be project root + publish template
-        fields['version'] = 0
+        fields['version'] = 1
         publish_path = publish_template.apply_fields(fields)
+        published_name = os.path.basename(publish_path).replace(".v001", "")
 
-        published_name = os.path.basename(publish_path).replace(".v000", "")
         version = unreal_utils.last_published_version(item.context, published_name)
         if version is not None:
             fields['version'] = version + 1
