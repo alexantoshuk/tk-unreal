@@ -103,18 +103,21 @@ class BreakdownSceneOperations(Hook):
             return
 
         sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
-        if not sgtk_path:
+        if (not sgtk_path) or (not source_path):
             self.logger.debug(f"Asset `{asset.get_path_name()}` does not have the tag `{source_path}`")
-            return None
+            return
+
+        asset_path_name = str(asset.get_path_name())
+        asset_type = str(type(asset))
 
         scene_item_dict = {
-            "node": asset.get_path_name(),
-            "node_name": asset.get_path_name(),
-            "type": str(type(asset)),
-            "node_type": str(type(asset)),
+            "node": asset_path_name,
+            "node_name": asset_path_name,
+            "type": asset_type,
+            "node_type": asset_type,
             # Must be a path linked ot a template with a {version} key
             # (see tk-multi-breakdown/python/tk_multi_breakdown/breakdown.py)
-            "path": source_path,
+            "path": str(source_path),
         }
 
         return scene_item_dict
