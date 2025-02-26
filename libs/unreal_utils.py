@@ -527,8 +527,8 @@ def _generate_fbx_import_task(
     replace_existing=True,
     automated=True,
     save=True,
-    materials=True,
-    textures=True,
+    materials=False,
+    textures=False,
     as_skeletal=False
 ):
     """

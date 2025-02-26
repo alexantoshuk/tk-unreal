@@ -87,28 +87,28 @@ class BreakdownSceneOperations(Hook):
 
         # engine = sgtk.platform.current_engine()
         asset_data = unreal.EditorAssetLibrary.find_asset_data(asset_path)
-        asset_type = asset_data.get_class().get_name()
+        asset_type = str(asset_data.get_class().get_name())
         # unreal.log(f"Asset type: {asset_type}")
         if asset_type not in ('GeometryCache', 'AnimSequence', 'StaticMesh', 'SkeletalMesh', 'Skeleton'):
             return
 
         asset = unreal.load_asset(asset_path)
         if not asset:
+            unreal.log_error(f"Can't load asset: {asset_path}")
             return
 
         try:
             source_path = asset.get_editor_property("asset_import_data").get_first_filename()
         except:
-            unreal.log_error(f"Can't get source file from asset: ", asset_path)
+            unreal.log_warning(f"Can't get source file from asset: {asset_path}")
             return
 
         sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
-        if (not sgtk_path) or (not source_path):
-            self.logger.debug(f"Asset `{asset.get_path_name()}` does not have the tag `{source_path}`")
+        if not sgtk_path:
+            unreal.log_warning(f"Asset `{asset.get_path_name()}` does not have the tag `{source_path}`")
             return
 
         asset_path_name = str(asset.get_path_name())
-        asset_type = str(type(asset))
 
         scene_item_dict = {
             "node": asset_path_name,
@@ -119,7 +119,6 @@ class BreakdownSceneOperations(Hook):
             # (see tk-multi-breakdown/python/tk_multi_breakdown/breakdown.py)
             "path": str(source_path),
         }
-
         return scene_item_dict
 
     def update(self, item=None, items=None):
@@ -140,6 +139,8 @@ class BreakdownSceneOperations(Hook):
         """
 
         def item_update(item):
+            if not item:
+                return
             node_path = item.get("node", item["node_name"])
             node_type = item.get("type", item["node_type"])
             file_path = item["path"]
