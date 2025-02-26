@@ -437,12 +437,12 @@ class UnrealActorPublishPlugin(HookBaseClass):
             try:
                 _unreal_export_actor_to_fbx(filename, actor)
             except Exception:
-                self.logger.debug("Actor %s cannot be exported to FBX." % (actor))
+                self.logger.debug("Actor '%s' cannot be exported to FBX." % (actor))
         else:
             try:
-                _unreal_export_anim_actor_to_fbx(filename, binding)
+                _unreal_export_anim_actor_to_fbx(filename, actor, binding)
             except Exception:
-                self.logger.debug("Animated actor %s cannot be exported to FBX." % (actor))
+                self.logger.debug("Animated actor '%s' cannot be exported to FBX." % (actor))
 
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path
@@ -466,12 +466,12 @@ class UnrealActorPublishPlugin(HookBaseClass):
             pass  # !FIXME: Raise exception when publish to not assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
 
 
-def _unreal_export_anim_actor_to_fbx(filename, binding):
+def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
     """
     Export an actor to FBX from Unreal
     """
     # Get an export task
-    params = _generate_sequencer_export_fbx_params(filename, binding)
+    params = _generate_sequencer_export_fbx_params(filename, actor, binding)
     if not params:
         return False, None
 
@@ -484,12 +484,13 @@ def _unreal_export_anim_actor_to_fbx(filename, binding):
     return result, params.fbx_file_name
 
 
-def _generate_sequencer_export_fbx_params(filename, binding):
+def _generate_sequencer_export_fbx_params(filename, actor, binding):
     # Setup AssetExportTask for non-interactive mode
     params = unreal.SequencerExportFBXParams()
-    params.world = unreal.get_editor_subsystem(
-        unreal.UnrealEditorSubsystem
-    ).get_editor_world()
+    params.world = actor.get_world()
+    # params.world = unreal.get_editor_subsystem(
+    #     unreal.UnrealEditorSubsystem
+    # ).get_editor_world()
     params.sequence = binding.sequence
     params.bindings = [binding]
     params.fbx_file_name = filename        # the filename to export as
