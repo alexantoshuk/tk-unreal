@@ -487,11 +487,17 @@ def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
 def _generate_sequencer_export_fbx_params(filename, actor, binding):
     # Setup AssetExportTask for non-interactive mode
     params = unreal.SequencerExportFBXParams()
-    params.world = actor.get_world()
+    level = actor.get_outer()
+    if level and isinstance(level, unreal.Level):
+        world = level.get_world()
+    else:
+        world = actor.get_world()
+    params.world = world
     # params.world = unreal.get_editor_subsystem(
     #     unreal.UnrealEditorSubsystem
     # ).get_editor_world()
     params.sequence = binding.sequence
+    params.root_sequence = binding.sequence.get_outer()
     params.bindings = [binding]
     params.fbx_file_name = filename        # the filename to export as
 
@@ -500,12 +506,13 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
     params.override_options.collision = False
     params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
+    params.override_options.level_of_detail = False
     # These are the default options for the FBX export
     # params.override_options.fbx_export_compatibility = fbx_2013
     # params.override_options.ascii = False
     # params.override_options.force_front_x_axis = False
     # params.override_options.vertex_color = True
-    # params.override_options.level_of_detail = True
+
     # params.override_options.collision = True
     # params.override_options.welded_vertices = True
     # params.override_options.map_skeletal_motion_to_root = False
@@ -554,6 +561,7 @@ def _generate_fbx_export_task(filename, actor):
     task.options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
     task.options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
     task.options.collision = False
+    task.options.level_of_detail = False
     # These are the default options for the FBX export
     # task.options.fbx_export_compatibility = fbx_2013
     # task.options.ascii = False
