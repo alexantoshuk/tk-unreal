@@ -497,7 +497,7 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
     #     unreal.UnrealEditorSubsystem
     # ).get_editor_world()
     params.sequence = binding.sequence
-    params.root_sequence = binding.sequence.get_outer()
+    # params.root_sequence = binding.sequence.get_outer()
     params.bindings = [binding]
     params.fbx_file_name = filename        # the filename to export as
 
