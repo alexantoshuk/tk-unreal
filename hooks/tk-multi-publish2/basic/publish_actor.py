@@ -478,7 +478,7 @@ def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
     # Do the FBX export
     result = unreal.SequencerTools().export_level_sequence_fbx(params)
     if not result:
-        unreal.log_error("Failed to export {}".format(params.fbx_file_name))
+        unreal.log_error(f"Failed to export {params.fbx_file_name}")
         return result, None
 
     return result, params.fbx_file_name
@@ -487,16 +487,12 @@ def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
 def _generate_sequencer_export_fbx_params(filename, actor, binding):
     # Setup AssetExportTask for non-interactive mode
     params = unreal.SequencerExportFBXParams()
-    level = actor.get_outer()
-    if level and isinstance(level, unreal.Level):
-        world = level.get_world()
-    else:
-        world = actor.get_world()
+
+    world = actor.get_world()
     params.world = world
-    # params.world = unreal.get_editor_subsystem(
-    #     unreal.UnrealEditorSubsystem
-    # ).get_editor_world()
+
     params.sequence = binding.sequence
+
     # params.root_sequence = binding.sequence.get_outer()
     params.bindings = [binding]
     params.fbx_file_name = filename        # the filename to export as
@@ -536,9 +532,9 @@ def _unreal_export_actor_to_fbx(filename, actor):
     result = unreal.Exporter.run_asset_export_task(task)
 
     if not result:
-        unreal.log_error("Failed to export {}".format(task.filename))
+        unreal.log_error(f"Failed to export {task.filename}")
         for error_msg in task.errors:
-            unreal.log_error("{}".format(error_msg))
+            unreal.log_error(f"{error_msg}")
 
         return result, None
 
