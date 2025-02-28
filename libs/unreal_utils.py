@@ -91,7 +91,7 @@ def find_possessable(sequence, actor_name):
 
 def find_actor(actor_name, actor_class=unreal.GeometryCacheActor):
     # Check if an actor with the same name already exists in the level
-    world = unreal.UnrealEditorSubsystem().get_editor_world()
+    world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     for actor in unreal.GameplayStatics.get_all_actors_of_class(world, actor_class):
         if actor.get_actor_label() == actor_name:
             return actor
@@ -117,6 +117,71 @@ def find_actor_sequence_binding(seq, actor_name):
                 except:
                     pass
     return walk(seq)
+
+
+def save_active_state(tracks):
+    tracks_data = {}
+    for track in tracks:
+        sections = []
+        for section in track.get_sections():
+            sections.append((section, section.is_active()))
+        tracks_data[track] = sections
+
+    return tracks_data
+
+
+def restore_active_state(tracks_data):
+    for (track, sections) in tracks_data.items():
+        for (section, active) in sections:
+            section.set_is_active(active)
+
+
+def save_state_and_bake(binding):
+    selected_bindings = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_bindings()
+    # Do the FBX export
+    tracks_state = save_active_state(binding.get_tracks())
+    # bake_transforms
+    start_frame = binding.sequence.get_playback_start()
+    end_frame = binding.sequence.get_playback_end()
+    bake_settings = unreal.BakingAnimationKeySettings(
+        baking_key_settings=unreal.BakingKeySettings.ALL_FRAMES,
+        frame_increment=1,
+        reduce_keys=False,
+        start_frame=unreal.FrameNumber(start_frame - 1),
+        end_frame=unreal.FrameNumber(end_frame + 1),
+        tolerance=0.001)
+
+    active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
+    focused_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_focused_level_sequence()
+    if focused_level_sequence != binding.sequence:
+        unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(binding.sequence)
+    bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings([binding], bake_settings)
+    # bid = binding.get_id()
+    # for b in selected_bindings:
+    #     if b.get_id() == bid:
+    #         return tracks_state
+
+    # unreal.LevelSequenceEditorBlueprintLibrary.select_bindings([binding])
+    # unreal.LevelSequenceEditorBlueprintLibrary.focus_level_sequence(focused_level_sequence)
+    # # try to restore focus to the section...
+    # for track in binding.get_tracks():
+    #     for sec in track.get_sections():
+    #         unreal.LevelSequenceEditorBlueprintLibrary.focus_level_sequence(sec)
+    #         return tracks_state
+
+    return tracks_state
+
+
+def restore_state_after_bake(binding, tracks_state):
+    # restore active state
+    restore_active_state(tracks_state)
+    # remove bake transform
+    baked_transform_track = set(binding.get_tracks()).difference(tracks_state.keys())
+    try:
+        baked_transform_track = baked_transform_track.pop()
+        binding.remove_track(baked_transform_track)
+    except:
+        unreal.log_warning(f"Can't find baked transform for '{binding}'. Skip deletion.")
 
 
 # def get_version(name):
@@ -411,7 +476,7 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
         geometry_cache = unreal.load_asset(geometry_cache_path)
 
         # Spawn the Geometry Cache actor
-        geometry_cache_actor = unreal.EditorActorSubsystem().spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        geometry_cache_actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         geometry_cache_actor.set_actor_label(destination_name)
 
         # Add the Geometry Cache actor to the Level Sequence

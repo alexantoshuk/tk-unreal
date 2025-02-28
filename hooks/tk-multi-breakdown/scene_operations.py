@@ -54,7 +54,7 @@ class BreakdownSceneOperations(Hook):
         # Parse Unreal Editor Assets
         # Call _build_scene_item_dict method on each asset to build the scene_item_dict (node, type, path)
         # The _build_scene_item_dict method can be overriden by derived hooks.
-        cur_level = unreal.LevelEditorSubsystem().get_current_level().get_path_name()
+        cur_level = unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).get_current_level().get_path_name()
         path, _ = os.path.split(cur_level)
         unreal.log(f"Current Level: {path}")
         splitted = path.split("/")[:5]

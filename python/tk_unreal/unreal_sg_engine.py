@@ -102,7 +102,7 @@ class ShotgunEngineWrapper(UESGEngine):
 
         unreal.log("execute_command called for {0}".format(command_name))
         if command_name == "Publish rendered movies...":
-            unreal.EditorActorSubsystem().select_nothing()
+            unreal.get_editor_subsystem(unreal.EditorActorSubsystem).select_nothing()
             unreal.LevelSequenceEditorBlueprintLibrary.empty_selection()
             command_name = "Publish..."
 

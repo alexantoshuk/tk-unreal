@@ -326,7 +326,7 @@ class UnrealActions(HookBaseClass):
         name = sg_publish_data["name"]
         name = os.path.splitext(name)[0]
         task_id = sg_publish_data['task']['id']
-        # print("!!!!!!! sg_publish_data >>>>> : ", sg_publish_data)
+
         step_short_name = unreal_utils.step_short_name(task_id)
 
         # Query the fields needed for the destination template from the context

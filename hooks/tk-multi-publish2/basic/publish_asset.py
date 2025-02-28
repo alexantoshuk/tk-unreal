@@ -424,10 +424,8 @@ class UnrealAssetPublishPlugin(HookBaseClass):
         # Export the asset from Unreal
         asset_path = item.properties["asset_path"]
         asset_name = item.properties["asset_name"]
-        try:
-            _unreal_export_asset_to_fbx(filename, asset_path, asset_name)
-        except Exception:
-            self.logger.debug("Asset %s cannot be exported to FBX." % (asset_path))
+
+        _unreal_export_asset_to_fbx(filename, asset_path, asset_name)
 
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path
