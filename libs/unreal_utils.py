@@ -119,27 +119,34 @@ def find_actor_sequence_binding(seq, actor_name):
     return walk(seq)
 
 
-def save_active_state(tracks):
-    tracks_data = {}
-    for track in tracks:
-        sections = []
-        for section in track.get_sections():
-            sections.append((section, section.is_active()))
-        tracks_data[track] = sections
-
-    return tracks_data
-
-
-def restore_active_state(tracks_data):
-    for (track, sections) in tracks_data.items():
-        for (section, active) in sections:
-            section.set_is_active(active)
+def save_active_state(bindings):
+    data = {
+        binding: {
+            track: [
+                (section, section.is_active())
+                for section in track.get_sections()
+            ]
+            for track in binding.get_tracks()
+        }
+        for binding in bindings
+    }
+    return data
 
 
-def save_state_and_bake(binding):
-    selected_bindings = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_bindings()
-    # Do the FBX export
-    tracks_state = save_active_state(binding.get_tracks())
+def restore_active_state(data):
+    for tracks_data in data.values():
+        for sections in tracks_data.values():
+            for (section, active) in sections:
+                section.set_is_active(active)
+
+
+def save_state_and_bake(bindings):
+    # selected_bindings = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_bindings()
+
+    data = save_active_state(bindings)
+    if not data:
+        return []
+    binding = next(iter(data))
     # bake_transforms
     start_frame = binding.sequence.get_playback_start()
     end_frame = binding.sequence.get_playback_end()
@@ -155,7 +162,9 @@ def save_state_and_bake(binding):
     focused_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_focused_level_sequence()
     if focused_level_sequence != binding.sequence:
         unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(binding.sequence)
-    bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings([binding], bake_settings)
+    # Bake it!!!
+    bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings(list(data.keys()), bake_settings)
+
     # bid = binding.get_id()
     # for b in selected_bindings:
     #     if b.get_id() == bid:
@@ -169,19 +178,19 @@ def save_state_and_bake(binding):
     #         unreal.LevelSequenceEditorBlueprintLibrary.focus_level_sequence(sec)
     #         return tracks_state
 
-    return tracks_state
+    return data
 
 
-def restore_state_after_bake(binding, tracks_state):
+def restore_state_after_bake(data):
     # restore active state
-    restore_active_state(tracks_state)
+    restore_active_state(data)
     # remove bake transform
-    baked_transform_track = set(binding.get_tracks()).difference(tracks_state.keys())
-    try:
-        baked_transform_track = baked_transform_track.pop()
-        binding.remove_track(baked_transform_track)
-    except:
-        unreal.log_warning(f"Can't find baked transform for '{binding}'. Skip deletion.")
+    for (binding, tracks_data) in data.items():
+        baked_transform_tracks = set(binding.get_tracks()).difference(tracks_data.keys())
+        if not baked_transform_tracks:
+            unreal.log_warning(f"Can't find baked transform for binding: '{binding.get_name()}'. Skip deletion.")
+        for t in baked_transform_tracks:
+            binding.remove_track(t)
 
 
 # def get_version(name):

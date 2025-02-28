@@ -469,12 +469,12 @@ def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
     if not params:
         return False, None
 
-    tracks_state = unreal_utils.save_state_and_bake(binding)
+    data = unreal_utils.save_state_and_bake([binding])
 
     # Do the FBX export
     result = unreal.SequencerTools().export_level_sequence_fbx(params)
 
-    unreal_utils.restore_state_after_bake(binding, tracks_state)
+    unreal_utils.restore_state_after_bake(data)
 
     if not result:
         unreal.log_error(f"Failed to export {params.fbx_file_name}")
@@ -489,10 +489,8 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
 
     world = actor.get_world()
     params.world = world
-    # unreal.log(f"!!!!!!!!! WORLD: {world}")
     params.sequence = binding.sequence
 
-    # params.root_sequence = binding.sequence.get_outer()
     params.bindings = [binding]
     params.fbx_file_name = filename        # the filename to export as
 

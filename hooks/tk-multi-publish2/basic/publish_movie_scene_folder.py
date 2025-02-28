@@ -459,8 +459,13 @@ def _unreal_export_actors_to_fbx(filename, bindings):
     if not params:
         return False, None
 
+    data = unreal_utils.save_state_and_bake(bindings)
+
     # Do the FBX export
     result = unreal.SequencerTools().export_level_sequence_fbx(params)
+
+    # unreal_utils.restore_state_after_bake(data)
+
     if not result:
         unreal.log_error("Failed to export {}".format(params.fbx_file_name))
         return result, None
@@ -474,6 +479,7 @@ def _generate_sequencer_export_fbx_params(filename, bindings):
     params.world = unreal.get_editor_subsystem(
         unreal.UnrealEditorSubsystem
     ).get_editor_world()
+
     params.sequence = bindings[0].sequence
     params.bindings = bindings
     params.fbx_file_name = filename        # the filename to export as
@@ -483,6 +489,7 @@ def _generate_sequencer_export_fbx_params(filename, bindings):
     params.override_options.collision = False
     params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
+    params.override_options.level_of_detail = False
     # These are the default options for the FBX export
     # params.override_options.fbx_export_compatibility = fbx_2013
     # params.override_options.ascii = False
