@@ -99,8 +99,11 @@ class BreakdownSceneOperations(Hook):
 
         try:
             source_path = asset.get_editor_property("asset_import_data").get_first_filename()
+            if not source_path:
+                unreal.log(f"Can't get source file from asset: {asset_path}")
+                return
         except:
-            unreal.log_warning(f"Can't get source file from asset: {asset_path}")
+            unreal.log(f"Can't get source file from asset: {asset_path}")
             return
 
         # sgtk_path = unreal.EditorAssetLibrary.get_metadata_tag(asset, "SG.url")
