@@ -285,8 +285,11 @@ class UnrealSessionCollector(HookBaseClass):
 
         if ctx:
             scene, shot, step = ctx
-            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
-            context = unreal_utils.create_shot_context(scene, shot, step)
+            task_name = None
+            if 'camera' in actor_name.lower():
+                task_name = 'Camera'
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}, TASK_NAME: {task_name}")
+            context = unreal_utils.create_shot_context(scene, shot, step, task_name)
             if context:
                 unreal.log(f"SG Context: {context} {context.to_dict()} ")
                 actor_item.properties["context"] = context

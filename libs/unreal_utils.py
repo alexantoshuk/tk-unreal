@@ -144,6 +144,7 @@ def save_state_and_bake(bindings):
     # selected_bindings = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_bindings()
 
     data = save_active_state(bindings)
+    unreal.log(f"Save state of tracks before baking for bindings: {data}")
     if not data:
         return []
     binding = next(iter(data))
@@ -154,29 +155,18 @@ def save_state_and_bake(bindings):
         baking_key_settings=unreal.BakingKeySettings.ALL_FRAMES,
         frame_increment=1,
         reduce_keys=False,
-        start_frame=unreal.FrameNumber(start_frame - 1),
-        end_frame=unreal.FrameNumber(end_frame + 1),
+        start_frame=unreal.FrameNumber(start_frame),
+        end_frame=unreal.FrameNumber(end_frame),
         tolerance=0.001)
 
-    active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
+    # active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
     focused_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_focused_level_sequence()
     if focused_level_sequence != binding.sequence:
         unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(binding.sequence)
     # Bake it!!!
-    bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings(list(data.keys()), bake_settings)
 
-    # bid = binding.get_id()
-    # for b in selected_bindings:
-    #     if b.get_id() == bid:
-    #         return tracks_state
-
-    # unreal.LevelSequenceEditorBlueprintLibrary.select_bindings([binding])
-    # unreal.LevelSequenceEditorBlueprintLibrary.focus_level_sequence(focused_level_sequence)
-    # # try to restore focus to the section...
-    # for track in binding.get_tracks():
-    #     for sec in track.get_sections():
-    #         unreal.LevelSequenceEditorBlueprintLibrary.focus_level_sequence(sec)
-    #         return tracks_state
+    unreal.log(f"Start baking of transforms for bindings: {bindings}")
+    bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings(bindings, bake_settings)  # , params=unreal.MovieSceneTimeUnit.TICK_RESOLUTION)
 
     return data
 
@@ -395,7 +385,7 @@ def last_published_version(ctx, published_name):
         return data.get("version_number")
 
 
-def create_asset_context(asset_type, asset, step):
+def create_asset_context(asset_type, asset, step, task_name=None):
     import sgtk
     engine = sgtk.platform.current_engine()
 
@@ -407,17 +397,29 @@ def create_asset_context(asset_type, asset, step):
     ])
     if not asset:
         return
-    task_data = engine.shotgun.find_one("Task", [
-        ["step.Step.short_name", "is", step],
-        ["entity", "is", asset],
-    ], ["name", "content", "step.Step.short_name"])
+
+    task_data = None
+    if task_name:
+        task_data = engine.shotgun.find_one("Task", [
+            ["step.Step.short_name", "is", step],
+            ["entity", "is", asset],
+            ["content", "is", task_name],
+        ], ["name", "content", "step.Step.short_name"])
+
+    if not task_data:
+        task_data = engine.shotgun.find_one("Task", [
+            ["step.Step.short_name", "is", step],
+            ["entity", "is", asset],
+        ], ["name", "content", "step.Step.short_name"])
+
     if not task_data:
         return
+
     ctx = engine.sgtk.context_from_entity("Task", task_data["id"])
     return ctx
 
 
-def create_shot_context(scene, shot, step):
+def create_shot_context(scene, shot, step, task_name=None):
     import sgtk
     engine = sgtk.platform.current_engine()
 
@@ -429,12 +431,25 @@ def create_shot_context(scene, shot, step):
     ])
     if not shot:
         return
-    task_data = engine.shotgun.find_one("Task", [
-        ["step.Step.short_name", "is", step],
-        ["entity", "is", shot],
-    ], ["name", "content", "step.Step.short_name"])
+
+    task_data = None
+    if task_name:
+        task_data = engine.shotgun.find_one("Task", [
+            ["step.Step.short_name", "is", step],
+            ["entity", "is", shot],
+            ["content", "is", task_name],
+        ], ["name", "content", "step.Step.short_name"])
+
+    if not task_data:
+        task_data = engine.shotgun.find_one("Task", [
+            ["step.Step.short_name", "is", step],
+            ["entity", "is", shot],
+            ["content", "is", task_name],
+        ], ["name", "content", "step.Step.short_name"])
+
     if not task_data:
         return
+
     ctx = engine.sgtk.context_from_entity("Task", task_data["id"])
     return ctx
 

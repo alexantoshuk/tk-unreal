@@ -500,6 +500,7 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
     params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.level_of_detail = False
+    params.override_options.export_local_time = False
     # These are the default options for the FBX export
     # params.override_options.fbx_export_compatibility = fbx_2013
     # params.override_options.ascii = False
