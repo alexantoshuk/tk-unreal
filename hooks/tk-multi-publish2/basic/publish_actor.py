@@ -500,7 +500,9 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
     params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
     params.override_options.level_of_detail = False
-    params.override_options.export_local_time = False
+    params.override_options.export_local_time = True
+    params.override_options.map_skeletal_motion_to_root = True
+    params.override_options.export_morph_targets = True
     # These are the default options for the FBX export
     # params.override_options.fbx_export_compatibility = fbx_2013
     # params.override_options.ascii = False
@@ -509,7 +511,6 @@ def _generate_sequencer_export_fbx_params(filename, actor, binding):
 
     # params.override_options.collision = True
     # params.override_options.welded_vertices = True
-    # params.override_options.map_skeletal_motion_to_root = False
 
     return params
 
