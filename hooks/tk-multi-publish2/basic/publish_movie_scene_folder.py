@@ -464,10 +464,10 @@ def _unreal_export_actors_to_fbx(filename, bindings):
     # Do the FBX export
     result = unreal.SequencerTools().export_level_sequence_fbx(params)
 
-    # unreal_utils.restore_state_after_bake(data)
+    unreal_utils.restore_state_after_bake(data)
 
     if not result:
-        unreal.log_error("Failed to export {}".format(params.fbx_file_name))
+        unreal.log_error(f"Failed to export {params.fbx_file_name}")
         return result, None
 
     return result, params.fbx_file_name
