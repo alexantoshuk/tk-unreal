@@ -47,7 +47,7 @@ class ShotgunEngineWrapper(UESGEngine):
             engine = sgtk.platform.current_engine()
             menu_items = self.create_menu(engine)
 
-            unreal.log("get_shotgrid_menu_items returned: {0}".format(menu_items.__str__()))
+            # unreal.log("get_shotgrid_menu_items returned: {0}".format(menu_items.__str__()))
 
             return menu_items
 
@@ -55,7 +55,7 @@ class ShotgunEngineWrapper(UESGEngine):
             """
             Provide backward compatibility.
             """
-            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
+            # unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
             return self.get_shotgrid_menu_items()
     else:
         @unreal.ufunction(override=True)
@@ -68,8 +68,8 @@ class ShotgunEngineWrapper(UESGEngine):
             engine = sgtk.platform.current_engine()
             menu_items = self.create_menu(engine)
 
-            unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
-            unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
+            # unreal.log_warning("get_shotgun_menu_items is deprecated, get_shotgrid_menu_items should be used instead.")
+            # unreal.log("get_shotgun_menu_items returned: {0}".format(menu_items.__str__()))
 
             return menu_items
 
@@ -84,7 +84,7 @@ class ShotgunEngineWrapper(UESGEngine):
             """
             Provide backward compatibility.
             """
-            unreal.log_warning("get_shotgun_work_dir is deprecated, get_shotgrid_work_dir should be used instead.")
+            # unreal.log_warning("get_shotgun_work_dir is deprecated, get_shotgrid_work_dir should be used instead.")
             return self.get_shotgrid_work_dir(*args, **kwargs)
     else:
         def get_shotgrid_work_dir(self, *args, **kwargs):
@@ -100,14 +100,14 @@ class ShotgunEngineWrapper(UESGEngine):
         """
         engine = sgtk.platform.current_engine()
 
-        unreal.log("execute_command called for {0}".format(command_name))
+        # unreal.log("execute_command called for {0}".format(command_name))
         if command_name == "Publish rendered movies...":
             unreal.get_editor_subsystem(unreal.EditorActorSubsystem).select_nothing()
             unreal.LevelSequenceEditorBlueprintLibrary.empty_selection()
             command_name = "Publish..."
 
         if command_name in engine.commands:
-            unreal.log("execute_command: Command {0} found.".format(command_name))
+            # unreal.log("execute_command: Command {0} found.".format(command_name))
             command = engine.commands[command_name]
             command_callback = command["callback"]
             command_callback = self._get_command_override(engine, command_name, command_callback)
@@ -201,7 +201,7 @@ class ShotgunEngineWrapper(UESGEngine):
         """
         Execute the callback right away
         """
-        unreal.log("_execute_callback called with {0}".format(callback.__str__()))
+        # unreal.log("_execute_callback called with {0}".format(callback.__str__()))
         self._callback = callback
         self._execute_within_exception_trap()
 
@@ -210,7 +210,7 @@ class ShotgunEngineWrapper(UESGEngine):
         Execute the callback deferred
         The primary purpose of this method is to detach the executing code from the menu invocation
         """
-        unreal.log("{0} _execute_deferred called with {1}".format(self, callback.__str__()))
+        # unreal.log("{0} _execute_deferred called with {1}".format(self, callback.__str__()))
         self._callback = callback
 
         from sgtk.platform.qt import QtCore
@@ -223,7 +223,7 @@ class ShotgunEngineWrapper(UESGEngine):
         """
         if self._callback is not None:
             try:
-                unreal.log("_execute_within_exception_trap: trying callback {0}".format(self._callback.__str__()))
+                # unreal.log("_execute_within_exception_trap: trying callback {0}".format(self._callback.__str__()))
                 self._callback()
             except Exception as e:
                 current_engine = sgtk.platform.current_engine()
@@ -422,7 +422,7 @@ class ShotgunEngineWrapper(UESGEngine):
 
         if not has_selection:
             selected_actors = get_selected_actors()
-            unreal.log(selected_actors)
+            # unreal.log(selected_actors)
             has_selection = len(selected_actors) > 0
 
         for app_name in sorted(commands_by_app.keys()):

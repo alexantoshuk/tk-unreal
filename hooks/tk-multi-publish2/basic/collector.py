@@ -380,6 +380,7 @@ class UnrealSessionCollector(HookBaseClass):
         """
 
         movies_dir = os.path.join(unreal_utils.PROJECT_ROOT, "render")
+        unreal.log(f"Collect rendered movies from '{movies_dir}'...")
         for (dirpath, dirnames, filenames) in os.walk(movies_dir):
             # filenames = (os.path.join(dirpath, f) for f in filenames)
             # for f in unreal_utils.last_versions(filenames):
@@ -406,12 +407,15 @@ class UnrealSessionCollector(HookBaseClass):
 
         ctx = unreal_utils.ctx_from_movie_path(movie_path)
 
-        unreal.log(f"Try to get SG Context from movie path")
+        unreal.log(f"Try to get SG Context from movie '{movie_path}' ")
         if ctx:
             scene, shot, step = ctx
             unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
 
             context = unreal_utils.create_shot_context(scene, shot, step)
+            if not context:
+                context = unreal_utils.create_shot_context(scene, shot, "LAY")
+
             if context:
                 unreal.log(f"Get SG Context from movie path: {context} {context.to_dict()} ")
                 mov_item = parent_item.create_item(

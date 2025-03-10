@@ -444,7 +444,6 @@ def create_shot_context(scene, shot, step, task_name=None):
         task_data = engine.shotgun.find_one("Task", [
             ["step.Step.short_name", "is", step],
             ["entity", "is", shot],
-            ["content", "is", task_name],
         ], ["name", "content", "step.Step.short_name"])
 
     if not task_data:
