@@ -371,6 +371,11 @@ class UnrealMoviePublishPlugin(HookBaseClass):
             fields['Sequence'] = scene
             fields['Shot'] = shot
             fields['Step'] = step
+            task = item.context.task['name']
+            if task == 'Lighting':
+                fields['name'] = shot
+            else:
+                fields['name'] = f"{shot}_{task}"
         # published_name
 
         # Get destination path for exported FBX from publish template
@@ -450,7 +455,9 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # Ensure that the destination path exists before rendering the sequence
         self.parent.ensure_folder_exists(destination_folder)
-        unreal_utils.convert_mov_to_mp4(item.context, item.properties.get("movie_path"), item.properties.get("publish_path"))
+        movie_path = item.properties.get("movie_path")
+        unreal.log(f"FFmpeg convert '{movie_path}' to '{publish_path}'...")
+        unreal_utils.convert_mov_to_mp4(item.context, movie_path, publish_path)
 
         # Publish the movie file to Shotgun
         super(UnrealMoviePublishPlugin, self).publish(settings, item)
@@ -509,7 +516,12 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         )
         self.logger.info("Upload complete!")
 
-        shutil.copy2(item.properties.get("movie_path"), os.path.dirname(item.properties.get("publish_path")))
+        # shutil.copy2(item.properties.get("movie_path"), os.path.dirname(item.properties.get("publish_path")))
+        # rename move to the same name as published mp4 but without version
+        l = len('.v001.mp4')
+        renamed_mov = publish_path[:-l] + '.mov'
+        unreal.log(f"Copy '{movie_path}' to '{renamed_mov}'... ")
+        shutil.copyfile(movie_path, renamed_mov)
 
     def finalize(self, settings, item):
         """
