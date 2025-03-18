@@ -423,14 +423,20 @@ class UnrealAssetPublishPlugin(HookBaseClass):
 
         # Export the asset from Unreal
         asset_path = item.properties["asset_path"]
-        asset_name = item.properties["asset_name"]
+        asset = unreal.EditorAssetLibrary.load_asset(asset_path)
 
-        _unreal_export_asset_to_fbx(filename, asset_path, asset_name)
+        if not asset:
+            unreal.log_error(f"Could not load asset {asset_path}")
+            return None
 
-        # let the base class register the publish
-        # the publish_file will copy the file from the work path to the publish path
-        # if the item is provided with the worK_template and publish_template properties
-        super(UnrealAssetPublishPlugin, self).publish(settings, item)
+        result = unreal_utils.export_asset_to_fbx(filename, asset)
+        if result:
+            # let the base class register the publish
+            # the publish_file will copy the file from the work path to the publish path
+            # if the item is provided with the worK_template and publish_template properties
+            super(UnrealAssetPublishPlugin, self).publish(settings, item)
+        else:
+            self.logger.error(f"Can't publish '{filename}'")
 
     def finalize(self, settings, item):
         """
@@ -447,59 +453,3 @@ class UnrealAssetPublishPlugin(HookBaseClass):
             super(UnrealAssetPublishPlugin, self).finalize(settings, item)
         except:
             pass  # !FIXME: Raise exception when publish to tot assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
-
-
-def _unreal_export_asset_to_fbx(filename, asset_path, asset_name):
-    """
-    Export an asset to FBX from Unreal
-
-    :param filename: The path where the exported FBX will be placed
-    :param asset_path: The Unreal asset to export to FBX
-    :param asset_name: The asset name to use for the FBX filename
-    """
-    # Get an export task
-    task = _generate_fbx_export_task(filename, asset_path, asset_name)
-    if not task:
-        return False, None
-
-    # Do the FBX export
-    result = unreal.Exporter.run_asset_export_task(task)
-
-    if not result:
-        unreal.log_error("Failed to export {}".format(task.filename))
-        for error_msg in task.errors:
-            unreal.log_error("{}".format(error_msg))
-
-        return result, None
-
-    return result, task.filename
-
-
-def _generate_fbx_export_task(filename, asset_path, asset_name):
-
-    loaded_asset = unreal.EditorAssetLibrary.load_asset(asset_path)
-
-    if not loaded_asset:
-        unreal.log_error("Failed to create FBX export task for {}: Could not load asset {}".format(asset_name, asset_path))
-        return None
-
-    # Setup AssetExportTask for non-interactive mode
-    task = unreal.AssetExportTask()
-    task.object = loaded_asset      # the asset to export
-    task.filename = filename        # the filename to export as
-    task.automated = True           # don't display the export options dialog
-    task.replace_identical = True   # always overwrite the output
-
-    # Setup export options for the export task
-    task.options = unreal.FbxExportOption()
-    # These are the default options for the FBX export
-    # task.options.fbx_export_compatibility = fbx_2013
-    # task.options.ascii = False
-    # task.options.force_front_x_axis = False
-    # task.options.vertex_color = True
-    # task.options.level_of_detail = True
-    # task.options.collision = True
-    # task.options.welded_vertices = True
-    # task.options.map_skeletal_motion_to_root = False
-
-    return task

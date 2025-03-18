@@ -431,17 +431,20 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # Export the asset from Unreal
         actor = item.properties["actor"]
-        actor_name = item.properties["actor_name"]
         binding = item.properties["binding"]
+        result = None
         if not binding:
-            _unreal_export_actor_to_fbx(filename, actor)
+            result = unreal_utils.export_asset_to_fbx(filename, actor.get_world())
         else:
-            _unreal_export_anim_actor_to_fbx(filename, actor, binding)
+            result = unreal_utils.export_bindings_to_fbx(filename, [binding])
 
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path
         # if the item is provided with the worK_template and publish_template properties
-        super(UnrealActorPublishPlugin, self).publish(settings, item)
+        if result:
+            super(UnrealActorPublishPlugin, self).publish(settings, item)
+        else:
+            self.logger.error(f"Can't publish '{filename}'")
 
     def finalize(self, settings, item):
         """
@@ -458,112 +461,3 @@ class UnrealActorPublishPlugin(HookBaseClass):
             super(UnrealActorPublishPlugin, self).finalize(settings, item)
         except:
             pass  # !FIXME: Raise exception when publish to not assigned task. The field is not editable for this user: [PublishedFile.sg_status_list]
-
-
-def _unreal_export_anim_actor_to_fbx(filename, actor, binding):
-    """
-    Export an actor to FBX from Unreal
-    """
-    # Get an export task
-    params = _generate_sequencer_export_fbx_params(filename, actor, binding)
-    if not params:
-        return False, None
-
-    data = unreal_utils.save_state_and_bake([binding])
-
-    # Do the FBX export
-    result = unreal.SequencerTools().export_level_sequence_fbx(params)
-
-    unreal_utils.restore_state_after_bake(data)
-
-    if not result:
-        unreal.log_error(f"Failed to export {params.fbx_file_name}")
-        return result, None
-
-    return result, params.fbx_file_name
-
-
-def _generate_sequencer_export_fbx_params(filename, actor, binding):
-    # Setup AssetExportTask for non-interactive mode
-    params = unreal.SequencerExportFBXParams()
-
-    world = actor.get_world()
-    params.world = world
-    params.sequence = binding.sequence
-
-    params.bindings = [binding]
-    params.fbx_file_name = filename        # the filename to export as
-
-    # Setup export options for the export task
-    params.override_options = unreal.FbxExportOption()
-    params.override_options.collision = False
-    params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    params.override_options.level_of_detail = False
-    params.override_options.export_local_time = True
-    params.override_options.map_skeletal_motion_to_root = True
-    params.override_options.export_morph_targets = True
-    # These are the default options for the FBX export
-    # params.override_options.fbx_export_compatibility = fbx_2013
-    # params.override_options.ascii = False
-    # params.override_options.force_front_x_axis = False
-    # params.override_options.vertex_color = True
-
-    # params.override_options.collision = True
-    # params.override_options.welded_vertices = True
-
-    return params
-
-
-def _unreal_export_actor_to_fbx(filename, actor):
-    """
-    Export an asset to FBX from Unreal
-
-    :param destination_path: The path where the exported FBX will be placed
-    :param actor: The Unreal actor to export to FBX
-    """
-    # Get an export task
-    task = _generate_fbx_export_task(filename, actor)
-    if not task:
-        return False, None
-
-    # Do the FBX export
-    result = unreal.Exporter.run_asset_export_task(task)
-
-    if not result:
-        unreal.log_error(f"Failed to export {task.filename}")
-        for error_msg in task.errors:
-            unreal.log_error(f"{error_msg}")
-
-        return result, None
-
-    return result, task.filename
-
-
-def _generate_fbx_export_task(filename, actor):
-
-    # filename = os.path.join(destination_path, actor_name + ".fbx")
-
-    # Setup AssetExportTask for non-interactive mode
-    task = unreal.AssetExportTask()
-    task.object = actor.get_world()      # the asset to export
-    task.filename = filename        # the filename to export as
-    task.automated = False           # don't display the export options dialog
-    task.replace_identical = True   # always overwrite the output
-
-    # Setup export options for the export task
-    task.options = unreal.FbxExportOption()
-    task.options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    task.options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
-    task.options.collision = False
-    task.options.level_of_detail = False
-    # These are the default options for the FBX export
-    # task.options.fbx_export_compatibility = fbx_2013
-    # task.options.ascii = False
-    # task.options.force_front_x_axis = False
-    # task.options.vertex_color = True
-    # task.options.level_of_detail = True
-    # task.options.welded_vertices = True
-    # task.options.map_skeletal_motion_to_root = False
-
-    return task

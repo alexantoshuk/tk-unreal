@@ -742,3 +742,128 @@ def _generate_alembic_camera_import_task(
     task.options = alembic_settings
 
     return task
+
+
+def export_asset_to_fbx(filename, asset):
+    """
+    Export an asset to FBX from Unreal
+
+    :param destination_path: The path where the exported FBX will be placed
+    :param actor: The Unreal actor to export to FBX
+    """
+    # Setup AssetExportTask for non-interactive mode
+    task = unreal.AssetExportTask()
+    task.object = asset     # the asset to export
+    task.filename = filename        # the filename to export as
+    task.automated = True           # don't display the export options dialog
+    task.replace_identical = True   # always overwrite the output
+
+    # Setup export options for the export task
+    task.options = unreal.FbxExportOption()
+    task.options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
+    task.options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
+    task.options.collision = False
+    task.options.level_of_detail = False
+    task.options.map_skeletal_motion_to_root = True
+    # task.options.fbx_export_compatibility = fbx_2013
+    # task.options.ascii = False
+    # task.options.force_front_x_axis = False
+    # task.options.vertex_color = True
+    # task.options.level_of_detail = True
+    # task.options.welded_vertices = True
+
+    # Do the FBX export
+    result = unreal.Exporter.run_asset_export_task(task)
+
+    if not result:
+        unreal.log_error(f"Failed to export asset '{asset}' to '{filename}'")
+        for error_msg in task.errors:
+            unreal.log_error(f"{error_msg}")
+
+        return False
+
+    return result
+
+
+def export_bindings_to_fbx(filename, bindings):
+    """
+    Export an bindings to FBX from Unreal
+
+    :param destination_path: The path where the exported FBX will be placed
+    :param actor: The Unreal actor to export to FBX
+    """
+    def find_skeletal_anim(binding):
+        if binding.find_tracks_by_type(unreal.MovieSceneSkeletalAnimationTrack):
+            return binding
+        for b in binding.get_child_possessables():
+            if b.find_tracks_by_type(unreal.MovieSceneSkeletalAnimationTrack):
+                return b
+        return None
+
+    skeletal_anim = None
+    if len(bindings) == 1:
+        skeletal_anim = find_skeletal_anim(bindings[0])
+
+    data = save_state_and_bake(bindings)
+
+    try:
+        if skeletal_anim:
+            # Skeleton anim export mode
+            # binding = skeletal_anim
+            binding = bindings[0]
+            name = binding.get_display_name()
+            unreal.log(f"Publish '{name}' as SkeletalAnimation")
+            export_option = unreal.AnimSeqExportOption()
+            export_option.record_in_world_space = True
+
+            world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+            sequence = binding.sequence
+
+            anim_sequence_asset_path = "/Game"
+            anim_sequence_asset_name = "__tmp_anim_seq__"
+
+            anim_sequence = unreal.AssetToolsHelpers.get_asset_tools().create_asset(anim_sequence_asset_name, anim_sequence_asset_path, unreal.AnimSequence, None)
+            unreal.log(f"Create temp AnimSequence asset '{anim_sequence_asset_path}/{anim_sequence_asset_name}'")
+            try:
+                result = unreal.SequencerTools().export_anim_sequence(world, sequence, anim_sequence, export_option, binding, create_link=False)
+                unreal.log(f"Bake '{name}' into temp AnimSequence asset'{anim_sequence_asset_path}/{anim_sequence_asset_name}'")
+                if result:
+                    export_asset_to_fbx(filename, anim_sequence)
+            finally:
+                unreal.get_editor_subsystem(unreal.EditorAssetSubsystem).delete_asset(f"{anim_sequence_asset_path}/{anim_sequence_asset_name}")
+                unreal.log(f"Delete temp AnimSequence asset '{anim_sequence_asset_path}/{anim_sequence_asset_name}'")
+
+        else:
+            params = unreal.SequencerExportFBXParams()
+            params.world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
+
+            params.sequence = bindings[0].sequence
+            params.bindings = bindings
+            params.fbx_file_name = filename        # the filename to export as
+
+            # Setup export options for the export task
+            params.override_options = unreal.FbxExportOption()
+            params.override_options.collision = False
+            params.override_options.bake_camera_and_light_animation = unreal.MovieSceneBakeType.BAKE_ALL
+            params.override_options.bake_actor_animation = unreal.MovieSceneBakeType.BAKE_ALL
+            params.override_options.level_of_detail = False
+            # These are the default options for the FBX export
+            # params.override_options.fbx_export_compatibility = fbx_2013
+            # params.override_options.ascii = False
+            # params.override_options.force_front_x_axis = False
+            # params.override_options.vertex_color = True
+            # params.override_options.level_of_detail = True
+
+            # params.override_options.welded_vertices = True
+            # params.override_options.map_skeletal_motion_to_root = False
+
+            result = unreal.SequencerTools().export_level_sequence_fbx(params)
+
+    finally:
+        restore_state_after_bake(data)
+
+    if not result:
+        unreal.log_error(f"Failed to export {filename}")
+        return result
+
+    return result
