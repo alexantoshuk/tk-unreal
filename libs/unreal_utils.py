@@ -801,8 +801,9 @@ def export_bindings_to_fbx(filename, bindings):
         return None
 
     skeletal_anim = None
-    if len(bindings) == 1:
-        skeletal_anim = find_skeletal_anim(bindings[0])
+    # !temp remove this feature
+    # if len(bindings) == 1:
+    #     skeletal_anim = find_skeletal_anim(bindings[0])
 
     data = save_state_and_bake(bindings)
 
