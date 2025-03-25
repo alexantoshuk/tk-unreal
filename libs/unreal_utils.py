@@ -22,7 +22,6 @@ def ffmpeg_path(ctx):
 
 
 def convert_mov_to_mp4(ctx, src, dst):
-
     commands = [
         ffmpeg_path(ctx),
         "-i",
@@ -117,6 +116,48 @@ def find_actor_sequence_binding(seq, actor_name):
                 except:
                     pass
     return walk(seq)
+
+
+def get_bound_actors(bindings):
+    data = []
+    for binding in bindings:
+        seq = binding.sequence
+        binding_id = seq.get_binding_id(binding)
+        actors = unreal.LevelSequenceEditorBlueprintLibrary.get_bound_objects(binding_id)
+        if actors:
+            data.append(actors[0])
+    return data
+
+
+def get_properties(objects, props):
+    data = {}
+    for o in objects:
+        props_dict = {}
+        for propname in props:
+            try:
+                props_dict[propname] = o.get_editor_property(propname)
+            except:
+                pass
+        data[o] = props_dict
+    return data
+
+
+def set_properties(objects, props):
+    for o in objects:
+        for propname, value in props.items():
+            try:
+                o.set_editor_property(propname, value)
+            except:
+                pass
+
+
+def restore_properties(props_data):
+    for o, props in props_data.items():
+        for propname, value in props.items():
+            try:
+                o.set_editor_property(propname, value)
+            except:
+                pass
 
 
 def save_active_state(bindings):
@@ -804,6 +845,10 @@ def export_bindings_to_fbx(filename, bindings):
     # !temp remove this feature
     # if len(bindings) == 1:
     #     skeletal_anim = find_skeletal_anim(bindings[0])
+    actors = get_bound_actors(bindings)
+    backup_enable_publish_mode = get_properties(actors, ['Enable Publish Mode'])
+
+    set_properties(actors, {'Enable Publish Mode': True})
 
     data = save_state_and_bake(bindings)
 
@@ -862,6 +907,7 @@ def export_bindings_to_fbx(filename, bindings):
 
     finally:
         restore_state_after_bake(data)
+        restore_properties(backup_enable_publish_mode)
 
     if not result:
         unreal.log_error(f"Failed to export {filename}")
