@@ -91,8 +91,8 @@ class UnrealSessionCollector(HookBaseClass):
         assets = self.collect_selected_assets(parent_item)
         if not assets:
             actors = self.collect_selected_actors(parent_item)
-            if not actors:
-                folders = self.collect_selected_movie_scene_folders(parent_item)
+            # if not actors:
+            folders = self.collect_selected_movie_scene_folders(parent_item)
 
         if (not assets) and (not actors) and (not folders):
             self.collect_rendered_movies(parent_item)
