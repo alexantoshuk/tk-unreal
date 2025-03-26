@@ -144,18 +144,22 @@ def get_properties(objects, props):
 
 def set_properties(objects, props):
     for o in objects:
+        name = o.get_actor_label()
         for propname, value in props.items():
             try:
                 o.set_editor_property(propname, value)
+                unreal.log(f"Set '{name}' property '{propname}' to '{value}'")
             except:
                 pass
 
 
 def restore_properties(props_data):
     for o, props in props_data.items():
+        name = o.get_actor_label()
         for propname, value in props.items():
             try:
                 o.set_editor_property(propname, value)
+                unreal.log(f"Set '{name}' property '{propname}' to '{value}'")
             except:
                 pass
 
