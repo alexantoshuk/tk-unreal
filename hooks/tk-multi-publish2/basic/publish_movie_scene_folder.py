@@ -391,7 +391,7 @@ class UnrealFolderPublishPlugin(HookBaseClass):
         item.properties["path"] = publish_path
 
         # Set the Published File Type
-        publish_type = "FBX"
+        publish_type = "FBX Group"
         item.properties["publish_type"] = publish_type
 
         # item.properties["publish_version"] = 10
