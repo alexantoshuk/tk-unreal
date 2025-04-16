@@ -90,9 +90,9 @@ class UnrealSessionCollector(HookBaseClass):
         actors = folders = None
         assets = self.collect_selected_assets(parent_item)
         if not assets:
-            actors = self.collect_selected_actors(parent_item)
-            # if not actors:
             folders = self.collect_selected_movie_scene_folders(parent_item)
+            if not folders:
+                actors = self.collect_selected_actors(parent_item)
 
         if (not assets) and (not actors) and (not folders):
             self.collect_rendered_movies(parent_item)
@@ -339,6 +339,7 @@ class UnrealSessionCollector(HookBaseClass):
         bindings = folder.get_child_object_bindings()
         if not bindings:
             return
+
         item_type = "unreal.movie_scene_folder"
         folder_item = parent_item.create_item(
             item_type,  # Include the asset type for the publish plugin to use
