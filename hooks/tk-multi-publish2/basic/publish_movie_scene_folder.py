@@ -427,7 +427,7 @@ class UnrealFolderPublishPlugin(HookBaseClass):
 
         bindings = item.properties["bindings"]
 
-        result = unreal_utils.export_bindings_to_fbx(filename, bindings)
+        result = unreal_utils.export_bindings_to_fbx(filename, bindings, bake=False)
 
         # let the base class register the publish
         # the publish_file will copy the file from the work path to the publish path

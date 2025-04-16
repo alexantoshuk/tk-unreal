@@ -830,7 +830,7 @@ def export_asset_to_fbx(filename, asset):
     return result
 
 
-def export_bindings_to_fbx(filename, bindings):
+def export_bindings_to_fbx(filename, bindings, bake=True):
     """
     Export an bindings to FBX from Unreal
 
@@ -854,7 +854,8 @@ def export_bindings_to_fbx(filename, bindings):
 
     set_properties(actors, {'Enable Publish Mode': True})
 
-    data = save_state_and_bake(bindings)
+    if bake:
+        data = save_state_and_bake(bindings)
 
     try:
         if skeletal_anim:
@@ -910,7 +911,8 @@ def export_bindings_to_fbx(filename, bindings):
             result = unreal.SequencerTools().export_level_sequence_fbx(params)
 
     finally:
-        restore_state_after_bake(data)
+        if bake:
+            restore_state_after_bake(data)
         restore_properties(backup_enable_publish_mode)
 
     if not result:
