@@ -16,6 +16,9 @@ libs_path = os.path.join(str(Path(__file__).parents[3]), 'libs')
 sys.path.insert(0, libs_path)
 import unreal_utils
 
+global actors_in_folders
+actors_in_folders = set()
+
 # A named tuple to store LevelSequence edits: the sequence/track/section
 # the edit is in.
 SequenceEdit = namedtuple("SequenceEdit", ["sequence", "track", "section"])
@@ -84,15 +87,18 @@ class UnrealSessionCollector(HookBaseClass):
         :param dict settings: Configured settings for this collector
         :param parent_item: Root item instance
         """
+        global actors_in_folders
+        actors_in_folders = set()
+
         # Create an item representing the current Unreal session
         parent_item = self.collect_current_session(settings, parent_item)
 
         actors = folders = None
         assets = self.collect_selected_assets(parent_item)
+
         if not assets:
             folders = self.collect_selected_movie_scene_folders(parent_item)
-            if not folders:
-                actors = self.collect_selected_actors(parent_item)
+            actors = self.collect_selected_actors(parent_item)
 
         if (not assets) and (not actors) and (not folders):
             self.collect_rendered_movies(parent_item)
@@ -237,6 +243,8 @@ class UnrealSessionCollector(HookBaseClass):
 
         n = 0
         for actor in selected_actors:
+            if actor.get_full_name() in actors_in_folders:
+                continue
             display_name = actor_name = actor.get_actor_label()
             binding = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
             if binding:
@@ -339,6 +347,8 @@ class UnrealSessionCollector(HookBaseClass):
         bindings = folder.get_child_object_bindings()
         if not bindings:
             return
+        global actors_in_folders
+        actors_in_folders = actors_in_folders.union(set(a.get_full_name() for a in unreal_utils.get_bound_actors(bindings)))
 
         item_type = "unreal.movie_scene_folder"
         folder_item = parent_item.create_item(
