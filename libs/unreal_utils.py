@@ -260,7 +260,7 @@ def restore_state_after_bake(data):
 def ctx_from_asset_path(path):
     # /Game/Assets/Prop/SM_Gun/SM_Gun
     splitted = path.split('/')
-    if splitted[:3] == ['', 'Game', 'Assets']:
+    if splitted[:3] in (['', 'Game', 'Assets'], ['', 'Game', 'assets']):
         if len(splitted) >= 6:
             asset_type, code, step = splitted[3:6]
         elif len(splitted) == 5:
@@ -274,7 +274,7 @@ def ctx_from_asset_path(path):
 
 def ctx_from_shot_path(path):
     splitted = path.split('/')
-    if splitted[:3] == ['', 'Game', 'Scenes']:
+    if splitted[:3] in (['', 'Game', 'Scenes'], ['', 'Game', 'scenes']):
         if len(splitted) >= 6:
             scn, shot, step = splitted[3:6]
             return scn, shot, step
