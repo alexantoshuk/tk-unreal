@@ -506,6 +506,7 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
     :param destination_path: The Content Browser path where the asset will be placed
     :param destination_name: The asset name to use; if None, will use the filename without extension
     """
+    unreal.log(f"Destination path: {destination_path}")
     tasks = []
     tasks.append(_generate_alembic_import_task(input_path, destination_path, destination_name, automated=automated))
 
@@ -517,12 +518,13 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
         unreal.log_warning("No objects were imported")
         return None
 
-    unreal.log("Import Task for: {}".format(task.filename))
+    unreal.log(f"Import Task for: {task.filename}")
     geometry_cache_path = task.imported_object_paths[0]
-    unreal.log("Imported object: {}".format(geometry_cache_path))
+    unreal.log(f"Imported object: {geometry_cache_path}")
 
     if create_actor:
-        scn, shot, step = ctx_from_shot_path(destination_path)
+        ctx = ctx_from_shot_path(destination_path)
+        scn, shot, step = ctx
         level_name = f"{shot}_{step}"
         seq_name = f"{shot}_{step}_sub"
 
