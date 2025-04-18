@@ -740,6 +740,7 @@ def _generate_alembic_import_task(
         frame_start=1001,
 
     )
+    alembic_settings.material_settings = unreal.AbcMaterialSettings(find_materials=True)
 
     alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
     task.options = alembic_settings
