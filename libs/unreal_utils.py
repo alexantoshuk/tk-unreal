@@ -121,12 +121,19 @@ def find_actor_sequence_binding(seq, actor_name):
 def get_bound_actors(bindings):
     data = []
     for binding in bindings:
-        seq = binding.sequence
-        binding_id = seq.get_binding_id(binding)
-        actors = unreal.LevelSequenceEditorBlueprintLibrary.get_bound_objects(binding_id)
-        if actors:
-            data.append(actors[0])
+        actor = get_bound_actor(binding)
+        if actor:
+            data.append(actor)
     return data
+
+
+def get_bound_actor(binding):
+    seq = binding.sequence
+    binding_id = seq.get_binding_id(binding)
+    actors = unreal.LevelSequenceEditorBlueprintLibrary.get_bound_objects(binding_id)
+    if actors:
+        return actors[0]
+    return None
 
 
 def get_properties(objects, props):
