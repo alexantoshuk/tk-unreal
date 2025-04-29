@@ -408,6 +408,11 @@ class UnrealSessionCollector(HookBaseClass):
             for f in filenames:
                 filename = os.path.join(dirpath, f)
                 self.create_rendered_movie_item(parent_item, filename)
+
+            for d in dirnames:
+                dirname = os.path.join(dirpath, d)
+                self.create_rendered_exr_sequence_item(parent_item, dirname)
+
             break
 
     def create_rendered_movie_item(self, parent_item, movie_path, display_name=None):
@@ -421,10 +426,15 @@ class UnrealSessionCollector(HookBaseClass):
         :returns: The created item.
         """
         asset_type = "Rendered Movie"
-        item_type = "unreal.render"
+        item_type = "unreal.render.mov"
         name = os.path.basename(movie_path)
         if not display_name:
             display_name = name
+
+        _, ext = os.path.splitext(movie_path)
+        if ext.lower() != '.mov':
+            unreal.log(f"SG Publish collector: ignore non-mov file '{movie_path}'")
+            return
 
         ctx = unreal_utils.ctx_from_movie_path(movie_path)
 
@@ -459,6 +469,71 @@ class UnrealSessionCollector(HookBaseClass):
         # mov_item.properties["ctx"] = ctx
         # Set asset properties which can be used by publish plugins
         icon_path = os.path.join(self._icons_dir(), "movie.png")
+        mov_item.set_icon_from_path(icon_path)
+
+        return mov_item
+
+    def create_rendered_exr_sequence_item(self, parent_item, seq_dir_path, display_name=None):
+        """
+        Create an unreal item under the given parent item.
+
+        :param asset_path: The unreal asset path, as a string.
+        :param asset_type: The unreal asset type, as a string.
+        :param asset_name: The unreal asset name, as a string.
+        :param display_name: Optional display name for the item.
+        :returns: The created item.
+        """
+
+        first = unreal_utils.find_first_seuence_file(seq_dir_path, ext='.exr')
+        if not first:
+            return
+
+        try:
+            _display_name = unreal_utils.filename_as_sequence_pattern(first)
+        except:
+            unreal.log(f"SG Publish collector: invalid sequence file name '{first}'")
+            return
+
+        asset_type = "Rendered EXR Sequence"
+        item_type = "unreal.render.exr"
+        name = os.path.basename(seq_dir_path)
+
+        if not display_name:
+            display_name = os.path.basename(_display_name)
+
+        ctx = unreal_utils.ctx_from_movie_path(seq_dir_path)
+
+        unreal.log(f"Try to get SG Context from sequence dir name '{seq_dir_path}' ")
+        if ctx:
+            scene, shot, step = ctx
+            unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
+
+            context = unreal_utils.create_shot_context(scene, shot, step)
+            if not context:
+                context = unreal_utils.create_shot_context(scene, shot, "LAY")
+
+            if context:
+                unreal.log(f"Get SG Context from movie path: {context} {context.to_dict()} ")
+                mov_item = parent_item.create_item(
+                    item_type,  # Include the asset type for the publish plugin to use
+                    asset_type,  # Display type
+                    display_name,  # Display name of item instance
+                )
+                mov_item.properties["context"] = context
+            else:
+                unreal.log_error(f"Can't find task with step '{step}' for shot '{shot}'")
+                return
+
+        else:
+            unreal.log(f"SG Context: None")
+            return
+
+        name, ext = os.path.splitext(name)
+        mov_item.properties["movie_path"] = seq_dir_path
+        mov_item.properties["name"] = name
+        # mov_item.properties["ctx"] = ctx
+        # Set asset properties which can be used by publish plugins
+        icon_path = os.path.join(self._icons_dir(), "image_sequence.png")
         mov_item.set_icon_from_path(icon_path)
 
         return mov_item

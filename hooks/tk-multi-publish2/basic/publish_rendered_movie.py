@@ -126,7 +126,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         accept() method. Strings can contain glob patters such as *, for example
         ["maya.*", "file.maya"]
         """
-        return ["unreal.render"]
+        return ["unreal.render.*"]
 
     def create_settings_widget(self, parent):
         """
@@ -421,8 +421,8 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         :returns: True if item is valid, False otherwise.
         """
         movie_path = item.properties.get("movie_path")
-        if not os.path.isfile(movie_path):
-            self.logger.debug(f"The rendered movie '{movie_path}' is not exists")
+        if not os.path.exists(movie_path):
+            self.logger.debug(f"The rendered movie / sequence '{movie_path}' is not exists")
             return False
 
         self.save_ui_settings(settings)
@@ -446,18 +446,29 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         # are appropriate for current os, no double separators, etc.
 
         # let the base class register the publish
+        movie_path = item.properties.get("movie_path")
+        is_exr_seq = os.path.isdir(movie_path)
 
         publish_path = os.path.normpath(item.properties["publish_path"])
 
         # Split the destination path into folder and filename
         destination_folder, movie_name = os.path.split(publish_path)
-        movie_name = os.path.splitext(movie_name)[0]
+        if not is_exr_seq:
+            movie_name = os.path.splitext(movie_name)[0]
 
         # Ensure that the destination path exists before rendering the sequence
         self.parent.ensure_folder_exists(destination_folder)
-        movie_path = item.properties.get("movie_path")
+
         unreal.log(f"FFmpeg convert '{movie_path}' to '{publish_path}'...")
-        unreal_utils.convert_mov_to_mp4(item.context, movie_path, publish_path)
+
+        if is_exr_seq:
+            unreal_utils.convert_exr_seq_to_mp4(movie_path, publish_path)
+        else:
+            fps = unreal_utils.project_field_value('sg_fps', default=30)
+            unreal_utils.convert_mov_to_mp4(movie_path, publish_path, fromspace='ACES - ACEScg', fps=fps)
+
+        if not os.path.exists(publish_path):
+            raise Exception("ERROR: Conversion to mp4 failed")
 
         # Publish the movie file to Shotgun
         super(UnrealMoviePublishPlugin, self).publish(settings, item)
@@ -503,7 +514,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
 
         # On windows, ensure the path is utf-8 encoded to avoid issues with
         # the shotgun api
-        upload_path = str(item.properties.get("publish_path"))
+        upload_path = str(publish_path)
         unreal.log("Upload_path: {}".format(upload_path))
 
         # Upload the file to SG
@@ -516,12 +527,23 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         )
         self.logger.info("Upload complete!")
 
-        # shutil.copy2(item.properties.get("movie_path"), os.path.dirname(item.properties.get("publish_path")))
-        # rename move to the same name as published mp4 but without version
-        l = len('.v001.mp4')
-        renamed_mov = publish_path[:-l] + '.mov'
-        unreal.log(f"Copy '{movie_path}' to '{renamed_mov}'... ")
-        shutil.copyfile(movie_path, renamed_mov)
+        if is_exr_seq:
+            # shutil.copy2(item.properties.get("movie_path"), os.path.dirname(item.properties.get("publish_path")))
+            ver_str = publish_path.rsplit('.', 2)[-2]
+            dst_name = "{}.{}".format(os.path.basename(movie_path), ver_str)
+            dst_path = os.path.join(os.path.dirname(publish_path), dst_name)
+            try:
+                shutil.rmtree(dst_path)
+                unreal.log(f"Remove existing sequence dir before copy: {dst_path}")
+            except:
+                pass
+            shutil.copytree(movie_path, dst_path)
+        else:
+            # rename move to the same name as published mp4 but without version
+            l = len('.v001.mp4')
+            renamed_mov = publish_path[:-l] + '.mov'
+            unreal.log(f"Copy '{movie_path}' to '{renamed_mov}'... ")
+            shutil.copyfile(movie_path, renamed_mov)
 
     def finalize(self, settings, item):
         """

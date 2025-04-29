@@ -1,5 +1,6 @@
 import unreal
 import os
+import sys
 import glob
 import subprocess
 import shutil
@@ -8,22 +9,72 @@ SHOT_SEQUENCE_START = 1001
 PROJECT_ROOT = os.path.normpath(unreal.SystemLibrary.get_project_directory())
 
 
-def tk_root(ctx):
+def tk_root():
+    import sgtk
+    en = sgtk.platform.current_engine()
+    ctx = en.context
     root = os.path.dirname(ctx.sgtk.roots.get('primary'))
     return os.path.join(root, 'playsense-cgi-tk')
 
 
-def ffmpeg_path(ctx):
-    ffmpeg = os.path.join(tk_root(ctx), 'app', 'Windows', 'ffmpeg', 'bin', 'ffmpeg.exe')
+scripts_path = os.path.join(tk_root(), "scripts")
+sys.path.insert(0, scripts_path)
+
+
+def ffmpeg_path():
+    ffmpeg = os.path.join(tk_root(), 'app', 'Windows', 'ffmpeg', 'bin', 'ffmpeg.exe')
     if not os.path.isfile(ffmpeg):
         ffmpeg = shutil.which("ffmpeg")
     unreal.log(f"FFmpeg Path: {ffmpeg}")
     return ffmpeg
 
 
-def convert_mov_to_mp4(ctx, src, dst):
+FFMPEG_PATH = ffmpeg_path()
+
+
+def project_field_value(name, default=None, context=None):
+    import sgtk
+    en = sgtk.platform.current_engine()
+    ctx = context if context else en.context
+    sg = en.shotgun
+
+    field_val = sg.find_one(
+        "Project", [["id", "is", ctx.project['id']]], [name])
+    if field_val:
+        field_val = field_val.get(name, default)
+    if field_val is None:
+        return default
+    return field_val
+
+
+def find_first_seuence_file(seq_dir_path, ext='.exr'):
+    dirname = os.path.basename(seq_dir_path)
+    for (_, _, filenames) in os.walk(seq_dir_path):
+        for f in filenames:
+            basename, _ext = os.path.splitext(f)
+            if _ext.lower() != ext:
+                unreal.log(f"SG Publish collector: ignore not '{ext}' seqence dir '{seq_dir_path}'")
+                return
+            if not f.startswith(dirname):
+                unreal.log(f"SG Publish collector: ignore non-conventional EXR seqence dir '{seq_dir_path}'")
+                return
+            return os.path.join(seq_dir_path, f)
+        unreal.log(f"SG Publish collector: ignore empty dir '{seq_dir_path}'")
+        return
+    return
+
+
+def filename_as_sequence_pattern(filename):
+    splitted = filename.split('.')
+    frame = splitted[-2]
+    iframe = int(frame)
+    splitted[-2] = "#" * len(frame)
+    return '.'.join(splitted)
+
+
+def convert_mov_to_mp4(src, dst):
     commands = [
-        ffmpeg_path(ctx),
+        FFMPEG_PATH,
         "-i",
         src,
         "-vcodec",
@@ -41,6 +92,11 @@ def convert_mov_to_mp4(ctx, src, dst):
     else:
         print("There was an error running your FFmpeg script")
         return False
+
+
+def convert_exr_seq_to_mp4(src, dst, fromspace='ACES - ACEScg', fps=30):
+    import seq2mov
+    seq2mov.convert(filename=src, out_filename=dst, fromspace=fromspace, fps=fps)
 
 
 def last_versions(filenames, pattern="???.mov"):
@@ -291,8 +347,8 @@ def ctx_from_shot_path(path):
 
 def ctx_from_movie_path(path):
     base, ext = os.path.splitext(path)
-    if ext.lower() not in ('.mov', '.mp4'):
-        return
+    # if ext.lower() not in ('.mov'):
+    #     return
 
     name = os.path.basename(path).split(".")[0]
     splitted = name.split("_", 2)
