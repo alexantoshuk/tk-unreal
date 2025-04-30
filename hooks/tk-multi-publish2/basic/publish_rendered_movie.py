@@ -462,10 +462,10 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         unreal.log(f"FFmpeg convert '{movie_path}' to '{publish_path}'...")
 
         if is_exr_seq:
-            unreal_utils.convert_exr_seq_to_mp4(movie_path, publish_path)
-        else:
             fps = unreal_utils.project_field_value('sg_fps', default=30)
-            unreal_utils.convert_mov_to_mp4(movie_path, publish_path, fromspace='ACES - ACEScg', fps=fps)
+            unreal_utils.convert_exr_seq_to_mp4(movie_path, publish_path, fromspace='ACES - ACEScg', fps=fps)
+        else:
+            unreal_utils.convert_mov_to_mp4(movie_path, publish_path)
 
         if not os.path.exists(publish_path):
             raise Exception("ERROR: Conversion to mp4 failed")
