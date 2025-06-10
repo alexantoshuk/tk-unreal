@@ -9,6 +9,27 @@ SHOT_SEQUENCE_START = 1001
 PROJECT_ROOT = os.path.normpath(unreal.SystemLibrary.get_project_directory())
 
 
+def update_status():
+    import sgtk
+    en = sgtk.platform.current_engine()
+    ctx = en.context
+    sg = en.shotgun
+
+    current_status = sg.find_one(
+        "Task", [["id", "is", ctx.task['id']]], ['sg_status_list'])
+    if current_status:
+        current_status = current_status.get('sg_status_list')
+
+    if current_status in ('fin', 'clsd'):
+        return
+    new_status = 'rev'
+    try:
+        sg.update("Task", ctx.task['id'], {'sg_status_list': new_status})
+    except:
+        sys.stderr.write(
+            "WARNING: Can't update task status to '{0}' from this user.\n".format(new_status))
+
+
 def tk_root():
     import sgtk
     en = sgtk.platform.current_engine()
@@ -269,9 +290,8 @@ def save_state_and_bake(bindings):
 
     # active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
     focused_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_focused_level_sequence()
-    if focused_level_sequence != binding.sequence:
-        unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(binding.sequence)
-    # Bake it!!!
+    # if focused_level_sequence != binding.sequence:
+    #     unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(binding.sequence)
 
     unreal.log(f"Start baking of transforms for bindings: {bindings}")
     bake_ok = unreal.get_editor_subsystem(unreal.LevelSequenceEditorSubsystem).bake_transform_with_settings(bindings, bake_settings)  # , params=unreal.MovieSceneTimeUnit.TICK_RESOLUTION)
@@ -598,7 +618,7 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
             return geometry_cache_path
 
         unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
-        unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+        # unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
 
         actor = find_actor(destination_name, unreal.GeometryCacheActor)
         if actor:
@@ -683,7 +703,8 @@ def unreal_import_fbx_camera(input_path, destination_path, destination_name):
     # world = unreal.EditorLevelLibrary.get_editor_world()
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
     ok = unreal.SequencerTools.import_level_sequence_fbx(world, seq, [binding], import_setting, input_path)
-    unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+
+    # unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
     return ok
 
 
