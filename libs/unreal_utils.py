@@ -374,10 +374,14 @@ def ctx_from_movie_path(path):
     splitted = name.split("_", 2)
     if len(splitted) < 2:
         return
-    splitted = splitted[:2]
+
     scene = splitted[0]
-    shot = "_".join(splitted)
-    return scene, shot, "LGT"
+    shot = "_".join(splitted[:2])
+    try:
+        task = splitted[2]
+        return scene, shot, "LGT", task
+    except:
+        return scene, shot, "LGT", "Lighting"
 
 
 def ctx_from_sequence(seq):
@@ -513,7 +517,7 @@ def last_published_version(ctx, published_name):
         return data.get("version_number")
 
 
-def create_asset_context(asset_type, asset, step, task_name=None):
+def create_asset_context(asset_type, asset, step=None, task_name=None):
     import sgtk
     engine = sgtk.platform.current_engine()
 
@@ -529,7 +533,6 @@ def create_asset_context(asset_type, asset, step, task_name=None):
     task_data = None
     if task_name:
         task_data = engine.shotgun.find_one("Task", [
-            ["step.Step.short_name", "is", step],
             ["entity", "is", asset],
             ["content", "is", task_name],
         ], ["name", "content", "step.Step.short_name"])
@@ -547,7 +550,7 @@ def create_asset_context(asset_type, asset, step, task_name=None):
     return ctx
 
 
-def create_shot_context(scene, shot, step, task_name=None):
+def create_shot_context(scene, shot, step=None, task_name=None):
     import sgtk
     engine = sgtk.platform.current_engine()
 
@@ -563,7 +566,6 @@ def create_shot_context(scene, shot, step, task_name=None):
     task_data = None
     if task_name:
         task_data = engine.shotgun.find_one("Task", [
-            ["step.Step.short_name", "is", step],
             ["entity", "is", shot],
             ["content", "is", task_name],
         ], ["name", "content", "step.Step.short_name"])

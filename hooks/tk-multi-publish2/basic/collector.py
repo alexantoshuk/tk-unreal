@@ -440,10 +440,10 @@ class UnrealSessionCollector(HookBaseClass):
 
         unreal.log(f"Try to get SG Context from movie '{movie_path}' ")
         if ctx:
-            scene, shot, step = ctx
+            scene, shot, step, task = ctx
             unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
 
-            context = unreal_utils.create_shot_context(scene, shot, step)
+            context = unreal_utils.create_shot_context(scene, shot, step, task)
             if not context:
                 context = unreal_utils.create_shot_context(scene, shot, "LAY")
 
@@ -505,10 +505,10 @@ class UnrealSessionCollector(HookBaseClass):
 
         unreal.log(f"Try to get SG Context from sequence dir name '{seq_dir_path}' ")
         if ctx:
-            scene, shot, step = ctx
+            scene, shot, step, task = ctx
             unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}")
 
-            context = unreal_utils.create_shot_context(scene, shot, step)
+            context = unreal_utils.create_shot_context(scene, shot, step, task)
             if not context:
                 context = unreal_utils.create_shot_context(scene, shot, "LAY")
 
