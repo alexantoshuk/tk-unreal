@@ -83,6 +83,11 @@ class UnrealActions(HookBaseClass):
                                      "params": None,
                                      "caption": "Import into Content Browser",
                                      "description": "This will import Alembic cache into the Unreal Editor Content Browser."})
+        if "import_vdb" in actions:
+            action_instances.append({"name": "import_vdb",
+                                     "params": None,
+                                     "caption": "Import into Content Browser",
+                                     "description": "This will import VDB cache into the Unreal Editor Content Browser."})
 
         if "import_alembic_camera" in actions:
             action_instances.append({"name": "import_alembic_camera",
@@ -140,7 +145,7 @@ class UnrealActions(HookBaseClass):
         # resolve path
         path = self.get_publish_path(sg_publish_data)
 
-        if name in ("import_fbx_camera", "import_fbx", "import_alembic", "import_alembic_camera"):
+        if name in ("import_fbx_camera", "import_fbx", "import_alembic", "import_alembic_camera", "import_vdb"):
             self._import_to_content_browser(path, sg_publish_data, name)
         else:
             try:
@@ -157,9 +162,8 @@ class UnrealActions(HookBaseClass):
         :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
         """
 
-        unreal.log("File to import: {}".format(path))
-
-        if not os.path.exists(path):
+        if action_name not in ("import_vdb",) and not os.path.exists(path):
+            unreal.log("File to import: {}".format(path))
             raise Exception("File not found on disk - '%s'" % path)
 
         asset_path = None
@@ -171,6 +175,10 @@ class UnrealActions(HookBaseClass):
         elif action_name == "import_alembic":
             destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
             asset_path = unreal_utils.unreal_import_alembic_asset(path, destination_path, destination_name, create_actor=True)
+
+        elif action_name == "import_vdb":
+            destination_path, destination_name = self._get_destination_path_and_name(sg_publish_data)
+            asset_path = unreal_utils.unreal_import_vdb(path, destination_path, destination_name, create_actor=True)
 
         elif action_name == "import_fbx_camera":
             destination_path, destination_name = self._get_destination_camera_path_and_name(sg_publish_data)
@@ -249,7 +257,7 @@ class UnrealActions(HookBaseClass):
 
         # Get the name field from the Publish Data
         name = sg_publish_data["name"]
-        name = os.path.splitext(name)[0]
+        name, ext = os.path.splitext(name)
 
         # Get the publish context to determine the template to use
         context = self.sgtk.context_from_entity_dictionary(sg_publish_data)
@@ -290,7 +298,7 @@ class UnrealActions(HookBaseClass):
         #     destination_name = destination_name_template.apply_fields(name_fields)
         # except Exception:
         #     destination_name = _sanitize_name(sg_publish_data["code"])
-
+        # print("INFO: ", ext.lower(), context.entity["type"], context.entity["name"], context.task["name"])
         return destination_path, _sanitize_name(name)
 
     def _get_destination_path_and_name(self, sg_publish_data):
@@ -324,7 +332,7 @@ class UnrealActions(HookBaseClass):
 
         # Get the name field from the Publish Data
         name = sg_publish_data["name"]
-        name = os.path.splitext(name)[0]
+        name, ext = os.path.splitext(name)
         task_id = sg_publish_data['task']['id']
 
         step_short_name = unreal_utils.step_short_name(task_id)
@@ -354,7 +362,11 @@ class UnrealActions(HookBaseClass):
         #     destination_name = destination_name_template.apply_fields(name_fields)
         # except Exception:
         #     destination_name = _sanitize_name(sg_publish_data["code"])
-
+        # print("INFO: ", ext.lower(), context.entity["type"], context.task["name"])
+        if ext.lower() == '.fbx' and context.entity["type"] == "Shot" and context.task["name"] in ('Animation',):
+            shotname = context.entity["name"]
+            if not name.startswith(shotname):
+                name = f"{shotname}_{name}"
         return destination_path, _sanitize_name(name)
 
 

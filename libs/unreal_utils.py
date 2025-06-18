@@ -654,25 +654,113 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
     return geometry_cache_path
 
 
-def unreal_import_alembic_camera(input_path, destination_path, destination_name):
+def unreal_import_vdb(input_path, destination_path, destination_name, automated=True, create_actor=False):
     """
-    UNIMPLEMENTED!!!
+    Import an VDB Volume into Unreal Content Browser
+
+    :param input_path: The vdb file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :param destination_name: The asset name to use; if None, will use the filename without extension
     """
+    unreal.log(f"Destination path: {destination_path}")
     tasks = []
-    tasks.append(_generate_alembic_camera_import_task(input_path, destination_path, destination_name))
+    tasks.append(_generate_vdb_import_task(input_path, destination_path, destination_name, automated=automated))
 
     unreal.AssetToolsHelpers.get_asset_tools().import_asset_tasks(tasks)
 
-    first_imported_object = None
+    task = tasks[0]
 
-    for task in tasks:
-        unreal.log("Import Task for: {}".format(task.filename))
-        for object_path in task.imported_object_paths:
-            unreal.log("Imported object: {}".format(object_path))
-            if not first_imported_object:
-                first_imported_object = object_path
+    if not task.imported_object_paths:
+        unreal.log_warning("No objects were imported")
+        return None
 
-    return first_imported_object
+    unreal.log(f"Import Task for: {task.filename}")
+    geometry_cache_path = task.imported_object_paths[0]
+    unreal.log(f"Imported object: {geometry_cache_path}")
+    return
+    if create_actor:
+        ctx = ctx_from_shot_path(destination_path)
+        scn, shot, step = ctx
+        level_name = f"{shot}_{step}"
+        seq_name = f"{shot}_{step}_sub"
+
+        seq = unreal.load_asset(f"{destination_path}/{seq_name}")
+
+        if seq and find_possessable(seq, destination_name):
+            unreal.log(f"Geometry Cache track '{destination_name}' exists. Skip creation.")
+            return geometry_cache_path
+
+        unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
+        # unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
+
+        actor = find_actor(destination_name, unreal.GeometryCacheActor)
+        if actor:
+            unreal.log(f"Geometry Cache actor '{destination_name}' exists. Replace it.")
+            actor.destroy_actor()
+            # return geometry_cache_path
+
+        geometry_cache = unreal.load_asset(geometry_cache_path)
+
+        # Spawn the Geometry Cache actor
+        geometry_cache_actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        geometry_cache_actor.set_actor_label(destination_name)
+
+        # Add the Geometry Cache actor to the Level Sequence
+        possessable = seq.add_possessable(geometry_cache_actor)
+        # possessable = seq.add_spawnable_from_instance(geometry_cache_actor)
+        track = possessable.add_track(unreal.MovieSceneGeometryCacheTrack)
+        section = track.add_section()
+        sequence_end = seq.get_playback_end()
+        section.set_range(SHOT_SEQUENCE_START, sequence_end)
+        section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
+        section.params = unreal.MovieSceneGeometryCacheParams(
+            geometry_cache_asset=geometry_cache,
+        )
+        # Log success
+        unreal.log(f"Geometry Cache actor '{destination_name}' added to the level and sequence '{seq_name}'.")
+        return geometry_cache_path
+
+    # Focus the Unreal Content Browser on the imported asset
+    # unreal.EditorAssetLibrary.sync_browser_to_objects([geometry_cache_path])
+    return geometry_cache_path
+
+
+def _generate_vdb_import_task(
+    filename,
+    destination_path,
+    destination_name=None,
+    replace_existing=True,
+    automated=False,
+    save=True,
+):
+    """
+    Create and configure an Unreal AssetImportTask
+
+    :param filename: The fbx file to import
+    :param destination_path: The Content Browser path where the asset will be placed
+    :return the configured AssetImportTask
+    """
+    import glob
+    basename, ext = os.path.splitext(filename)
+    filepattern = f"{basename}.*{ext}"
+    for f in glob.iglob(filepattern):
+        filename = f
+        break
+
+    task = unreal.AssetImportTask()
+    task.filename = filename
+    task.destination_path = destination_path
+
+    # By default, destination_name is the filename without the extension
+    if destination_name is not None:
+        task.destination_name = destination_name
+
+    task.replace_existing = replace_existing
+    task.automated = automated
+    task.save = save
+    task.async_ = True
+
+    return task
 
 
 def unreal_import_fbx_camera(input_path, destination_path, destination_name):
@@ -827,50 +915,6 @@ def _generate_alembic_import_task(
 
     )
     alembic_settings.material_settings = unreal.AbcMaterialSettings(find_materials=True)
-
-    alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
-    task.options = alembic_settings
-
-    return task
-
-
-def _generate_alembic_camera_import_task(
-    filename,
-    destination_path,
-    destination_name=None,
-    replace_existing=True,
-    automated=True,
-    save=True,
-):
-    """
-    Create and configure an Unreal AssetImportTask
-
-    :param filename: The fbx file to import
-    :param destination_path: The Content Browser path where the asset will be placed
-    :return the configured AssetImportTask
-    """
-
-    task = unreal.AssetImportTask()
-    task.filename = filename
-    task.destination_path = destination_path
-
-    # By default, destination_name is the filename without the extension
-    if destination_name is not None:
-        task.destination_name = destination_name
-
-    task.replace_existing = replace_existing
-    task.automated = automated
-    task.save = save
-    task.async_ = True
-
-    alembic_settings = unreal.AbcImportSettings()
-    if True:  # is Houdini? FIX to automatic determine this
-        # Assign the Alembic settings to the import task
-        # Customize Alembic import settings here if needed
-        alembic_settings.conversion_settings = unreal.AbcConversionSettings(
-            # scale=unreal.Vector(100, -100, 100),  # Set the scale using a Vector (adjust the values accordingly)
-            rotation=unreal.Vector(90, 0.0, 0.0)  # Set the rotation using a Vector (adjust the values accordingly)
-        )
 
     alembic_settings.import_type = unreal.AlembicImportType.GEOMETRY_CACHE
     task.options = alembic_settings
