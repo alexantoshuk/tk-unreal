@@ -698,6 +698,10 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
 
         vdb_tex = unreal.load_asset(vdb_path)
 
+        _, start_frame, _ = input_path.rsplit('.', 2)
+        start_frame = int(start_frame)
+        end_frame = start_frame + vdb_tex.get_num_frames() - 1
+
         ## create material and assign vdb #########################################################################
         create_material_instance("/Game/assets/fx/vdb/_common/VDB_materials/mm_VDB", destination_path, matname)
         mat = unreal.load_asset(matpath)
@@ -732,7 +736,8 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
         actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_class(unreal.HeterogeneousVolume.static_class(), unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         actor.set_actor_label(actor_name)
         actor.set_actor_scale3d(unreal.Vector(100.0, 100.0, 100.0))
-        heterogeneous_volume_component = actor.get_component_by_class(unreal.HeterogeneousVolumeComponent.static_class())        
+        actor.set_actor_rotation(unreal.Rotator(-90.0, 0.0, 0.0), False)
+        heterogeneous_volume_component = actor.get_component_by_class(unreal.HeterogeneousVolumeComponent.static_class())
 
         # add a binding for the actor
         binding = seq.add_possessable(actor)
@@ -750,7 +755,11 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
             "frame", "frame")
         section = track.add_section()
         section.set_start_frame_bounded(0)
-        section.set_end_frame_bounded(0)        
+        section.set_end_frame_bounded(0)
+        channel = section.get_channels()[0]
+
+        channel.add_key(float(start_frame), float(start_frame))
+        channel.add_key(float(end_frame), float(end_frame))
 
         heterogeneous_volume_component.set_editor_property("override_materials", [mat])
 
