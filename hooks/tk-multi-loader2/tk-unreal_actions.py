@@ -312,6 +312,8 @@ class UnrealActions(HookBaseClass):
 
         # Get the publish context to determine the template to use
         context = self.sgtk.context_from_entity_dictionary(sg_publish_data)
+        unreal.log(f"SG_PUBLISH_DATA: {sg_publish_data}")
+        unreal.log(f"SG_CONTEXT: {context}")
 
         # Get the destination templates based on the context
         # Assets and Shots supported by default
@@ -334,7 +336,8 @@ class UnrealActions(HookBaseClass):
         splitted_name = name.split(".")
         name = splitted_name[0]
         ext = splitted_name[-1]
-        task_id = sg_publish_data['task']['id']
+        task = sg_publish_data['task']
+        task_id = task['id']
 
         step_short_name = unreal_utils.step_short_name(task_id)
 
