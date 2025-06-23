@@ -731,8 +731,8 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
 
         actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_class(unreal.HeterogeneousVolume.static_class(), unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
         actor.set_actor_label(actor_name)
-        heterogeneous_volume_component = actor.get_component_by_class(unreal.HeterogeneousVolumeComponent.static_class())
-        heterogeneous_volume_component.set_editor_property("override_materials ", [mat])
+        actor.set_actor_scale3d(unreal.Vector(100.0, 100.0, 100.0))
+        heterogeneous_volume_component = actor.get_component_by_class(unreal.HeterogeneousVolumeComponent.static_class())        
 
         # add a binding for the actor
         binding = seq.add_possessable(actor)
@@ -751,6 +751,8 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
         section = track.add_section()
         section.set_start_frame_bounded(0)
         section.set_end_frame_bounded(0)        
+
+        heterogeneous_volume_component.set_editor_property("override_materials", [mat])
 
         unreal.log(f"VDB actor '{actor_name}' added to the level and sequence '{seq_name}'.")
         return vdb_path
