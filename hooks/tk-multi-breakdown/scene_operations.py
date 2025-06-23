@@ -61,8 +61,7 @@ class BreakdownSceneOperations(Hook):
         path = "/".join(splitted)
         unreal.log(f"Current SHOT: {path}")
 
-        for asset_path in unreal.EditorAssetLibrary.list_assets(path):
-            # unreal.log(f"Found asset: {asset_path}")
+        for asset_path in unreal.EditorAssetLibrary.list_assets(path, recursive=True):
             scene_item_dict = self._build_scene_item_dict(asset_path)
             if not scene_item_dict:
                 continue
@@ -88,8 +87,8 @@ class BreakdownSceneOperations(Hook):
         # engine = sgtk.platform.current_engine()
         asset_data = unreal.EditorAssetLibrary.find_asset_data(asset_path)
         asset_type = str(asset_data.get_class().get_name())
-        # unreal.log(f"Asset type: {asset_type}")
-        if asset_type not in ('GeometryCache', 'AnimSequence', 'StaticMesh', 'SkeletalMesh', 'Skeleton'):
+        unreal.log(f"Asset type: {asset_type}")
+        if asset_type not in ('GeometryCache', 'AnimSequence', 'StaticMesh', 'SkeletalMesh', 'Skeleton', 'AnimatedSparseVolumeTexture'):
             return
 
         asset = unreal.load_asset(asset_path)
@@ -191,8 +190,8 @@ class BreakdownSceneOperations(Hook):
                 unreal_utils.unreal_import_fbx_camera(new_source_file_path, asset_path, asset_name)
             elif published_file_type == "Alembic Cache":
                 unreal_utils.unreal_import_alembic_asset(new_source_file_path, asset_path, asset_name)
-            elif published_file_type == "Alembic Camera":
-                unreal_utils.unreal_import_alembic_camera(new_source_file_path, asset_path, asset_name)
+            elif published_file_type == "VDB":
+                unreal_utils.unreal_import_vdb(new_source_file_path, asset_path, asset_name, automated=True)
 
         if items:
             for item in items:

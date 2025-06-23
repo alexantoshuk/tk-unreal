@@ -165,6 +165,13 @@ def find_possessable(sequence, actor_name):
     return None
 
 
+def find_spawnables(sequence, actor_name):
+    for track in sequence.get_spawnables():
+        if track.get_display_name() == actor_name:
+            return track
+    return None
+
+
 def find_actor(actor_name, actor_class=unreal.GeometryCacheActor):
     # Check if an actor with the same name already exists in the level
     world = unreal.get_editor_subsystem(unreal.UnrealEditorSubsystem).get_editor_world()
@@ -654,7 +661,7 @@ def unreal_import_alembic_asset(input_path, destination_path, destination_name, 
     return geometry_cache_path
 
 
-def unreal_import_vdb(input_path, destination_path, destination_name, automated=True, create_actor=False):
+def unreal_import_vdb(input_path, destination_path, destination_name, automated=False, create_actor=False):
     """
     Import an VDB Volume into Unreal Content Browser
 
@@ -662,6 +669,8 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
     :param destination_path: The Content Browser path where the asset will be placed
     :param destination_name: The asset name to use; if None, will use the filename without extension
     """
+
+    unreal.log(f"Destination name: {destination_name}")
     unreal.log(f"Destination path: {destination_path}")
     tasks = []
     tasks.append(_generate_vdb_import_task(input_path, destination_path, destination_name, automated=automated))
@@ -675,10 +684,31 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
         return None
 
     unreal.log(f"Import Task for: {task.filename}")
-    geometry_cache_path = task.imported_object_paths[0]
-    unreal.log(f"Imported object: {geometry_cache_path}")
-    return
+    vdb_path = task.imported_object_paths[0]
+    unreal.log(f"Imported object: {vdb_path}")
+
     if create_actor:
+        matname = destination_name + "_mat"
+        matpath = f"{destination_path}/{matname}"
+        try:
+            if unreal.EditorAssetLibrary.delete_asset(matpath):
+                unreal.log(f"Found asset '{matpath}' exists. Recreate.")
+        except:
+            pass
+
+        vdb_tex = unreal.load_asset(vdb_path)
+
+        ## create material and assign vdb #########################################################################
+        create_material_instance("/Game/assets/fx/vdb/_common/VDB_materials/mm_VDB", destination_path, matname)
+        mat = unreal.load_asset(matpath)
+        unreal.MaterialEditingLibrary.set_material_instance_sparse_volume_texture_parameter_value(
+            mat, "SparseVolumeTexture", vdb_tex
+        )
+        unreal.EditorAssetLibrary.save_asset(matpath)
+
+        ## create actor and track #################################################################################
+        actor_name = destination_name + "_actor"
+
         ctx = ctx_from_shot_path(destination_path)
         scn, shot, step = ctx
         level_name = f"{shot}_{step}"
@@ -686,43 +716,48 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
 
         seq = unreal.load_asset(f"{destination_path}/{seq_name}")
 
-        if seq and find_possessable(seq, destination_name):
-            unreal.log(f"Geometry Cache track '{destination_name}' exists. Skip creation.")
-            return geometry_cache_path
+        if seq and find_possessable(seq, actor_name):
+            unreal.log(f"VDB track '{actor_name}' exists. Skip creation.")
+            return vdb_path
 
         unreal.get_editor_subsystem(unreal.LevelEditorSubsystem).load_level(f"{destination_path}/{level_name}")
         # unreal.LevelSequenceEditorBlueprintLibrary.open_level_sequence(seq)
 
-        actor = find_actor(destination_name, unreal.GeometryCacheActor)
+        actor = find_actor(actor_name, unreal.HeterogeneousVolume.static_class())
         if actor:
-            unreal.log(f"Geometry Cache actor '{destination_name}' exists. Replace it.")
+            unreal.log(f"VDB actor '{actor_name}' exists. Replace it.")
             actor.destroy_actor()
             # return geometry_cache_path
 
-        geometry_cache = unreal.load_asset(geometry_cache_path)
+        actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_class(unreal.HeterogeneousVolume.static_class(), unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
+        actor.set_actor_label(actor_name)
+        heterogeneous_volume_component = actor.get_component_by_class(unreal.HeterogeneousVolumeComponent.static_class())
+        heterogeneous_volume_component.set_editor_property("override_materials ", [mat])
 
-        # Spawn the Geometry Cache actor
-        geometry_cache_actor = unreal.get_editor_subsystem(unreal.EditorActorSubsystem).spawn_actor_from_object(geometry_cache, unreal.Vector(0, 0, 0), unreal.Rotator(0, 0, 0))
-        geometry_cache_actor.set_actor_label(destination_name)
+        # add a binding for the actor
+        binding = seq.add_possessable(actor)
+        binding.set_name(actor_name)
+        binding.set_display_name(actor_name)
+        unreal.log(f"Add as posessable to sequence '{seq}'")
 
-        # Add the Geometry Cache actor to the Level Sequence
-        possessable = seq.add_possessable(geometry_cache_actor)
-        # possessable = seq.add_spawnable_from_instance(geometry_cache_actor)
-        track = possessable.add_track(unreal.MovieSceneGeometryCacheTrack)
+        component_binding = seq.add_possessable(
+            heterogeneous_volume_component)
+        component_binding.set_parent(binding)
+        track = component_binding.add_track(
+            unreal.MovieSceneFloatTrack)
+        unreal.log(f"Add component track 'frame'")
+        track.set_property_name_and_path(
+            "frame", "frame")
         section = track.add_section()
-        sequence_end = seq.get_playback_end()
-        section.set_range(SHOT_SEQUENCE_START, sequence_end)
-        section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
-        section.params = unreal.MovieSceneGeometryCacheParams(
-            geometry_cache_asset=geometry_cache,
-        )
-        # Log success
-        unreal.log(f"Geometry Cache actor '{destination_name}' added to the level and sequence '{seq_name}'.")
-        return geometry_cache_path
+        section.set_start_frame_bounded(0)
+        section.set_end_frame_bounded(0)        
+
+        unreal.log(f"VDB actor '{actor_name}' added to the level and sequence '{seq_name}'.")
+        return vdb_path
 
     # Focus the Unreal Content Browser on the imported asset
-    # unreal.EditorAssetLibrary.sync_browser_to_objects([geometry_cache_path])
-    return geometry_cache_path
+    # unreal.EditorAssetLibrary.sync_browser_to_objects([vdb_asset_path])
+    return vdb_path
 
 
 def _generate_vdb_import_task(
@@ -740,12 +775,6 @@ def _generate_vdb_import_task(
     :param destination_path: The Content Browser path where the asset will be placed
     :return the configured AssetImportTask
     """
-    import glob
-    basename, ext = os.path.splitext(filename)
-    filepattern = f"{basename}.*{ext}"
-    for f in glob.iglob(filepattern):
-        filename = f
-        break
 
     task = unreal.AssetImportTask()
     task.filename = filename
@@ -1053,3 +1082,23 @@ def export_bindings_to_fbx(filename, bindings, bake=True):
         return result
 
     return result
+
+
+def create_material_instance(parent_material_path, path, name):
+    asset_tools = unreal.AssetToolsHelpers.get_asset_tools()
+
+    parent_material = unreal.EditorAssetLibrary.load_asset(parent_material_path)
+    if not parent_material:
+        unreal.log_error(f"Failed to load parent material: {parent_material_path}")
+        return
+
+    material_instance = asset_tools.create_asset(
+        asset_name=name,
+        package_path=path,
+        asset_class=unreal.MaterialInstanceConstant,
+        factory=unreal.MaterialInstanceConstantFactoryNew()
+    )
+    unreal.MaterialEditingLibrary.set_material_instance_parent(material_instance, parent_material)
+    unreal.EditorAssetLibrary.save_asset(f"{path}/{name}")
+    unreal.log(f"Material Instance '{name}' created and saved at '{path}'")
+    material_instance

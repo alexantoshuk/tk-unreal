@@ -161,9 +161,8 @@ class UnrealActions(HookBaseClass):
         :param path: Path to file.
         :param sg_publish_data: Shotgun data dictionary with all the standard publish fields.
         """
-
-        if action_name not in ("import_vdb",) and not os.path.exists(path):
-            unreal.log("File to import: {}".format(path))
+        unreal.log("File to import: {}".format(path))
+        if not os.path.exists(path):
             raise Exception("File not found on disk - '%s'" % path)
 
         asset_path = None
@@ -332,7 +331,9 @@ class UnrealActions(HookBaseClass):
 
         # Get the name field from the Publish Data
         name = sg_publish_data["name"]
-        name, ext = os.path.splitext(name)
+        splitted_name = name.split(".")
+        name = splitted_name[0]
+        ext = splitted_name[-1]
         task_id = sg_publish_data['task']['id']
 
         step_short_name = unreal_utils.step_short_name(task_id)
@@ -363,7 +364,7 @@ class UnrealActions(HookBaseClass):
         # except Exception:
         #     destination_name = _sanitize_name(sg_publish_data["code"])
         # print("INFO: ", ext.lower(), context.entity["type"], context.task["name"])
-        if ext.lower() == '.fbx' and context.entity["type"] == "Shot" and context.task["name"] in ('Animation',):
+        if ext.lower() == 'fbx' and context.entity["type"] == "Shot" and context.task["name"] in ('Animation',):
             shotname = context.entity["name"]
             if not name.startswith(shotname):
                 name = f"{shotname}_{name}"
