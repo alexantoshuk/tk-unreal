@@ -756,10 +756,10 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
         section = track.add_section()
         section.set_start_frame_bounded(0)
         section.set_end_frame_bounded(0)
-        channel = section.get_channels()[0]
+        channel = section.get_all_channels()[0]
 
-        channel.add_key(float(start_frame), float(start_frame))
-        channel.add_key(float(end_frame), float(end_frame))
+        channel.add_key(unreal.FrameNumber(start_frame), float(start_frame), interpolation=unreal.MovieSceneKeyInterpolation.LINEAR)
+        channel.add_key(unreal.FrameNumber(end_frame), float(end_frame), interpolation=unreal.MovieSceneKeyInterpolation.LINEAR)
 
         heterogeneous_volume_component.set_editor_property("override_materials", [mat])
 
