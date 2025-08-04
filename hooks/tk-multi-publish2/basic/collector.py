@@ -230,6 +230,14 @@ class UnrealSessionCollector(HookBaseClass):
 
         actor_system = unreal.get_editor_subsystem(unreal.EditorActorSubsystem)
         selected_actors = actor_system.get_selected_level_actors()
+        selected_bindings = unreal.LevelSequenceEditorBlueprintLibrary.get_selected_bindings()
+        bindings_map = {}
+        for b in selected_bindings:
+            a = unreal_utils.get_bound_actor(b)
+            if not a:
+                continue
+            actor_name = a.get_actor_label()
+            bindings_map[actor_name] = b
 
         unreal_sg = sgtk.platform.current_engine().unreal_sg_engine
         if unreal_sg.selected_assets:
@@ -240,7 +248,9 @@ class UnrealSessionCollector(HookBaseClass):
         n = 0
         for actor in selected_actors:
             display_name = actor_name = actor.get_actor_label()
-            binding = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
+            binding = bindings_map.get(actor_name)
+            if not binding:
+                binding = unreal_utils.find_actor_sequence_binding(active_level_sequence, actor_name)
             if binding:
                 seq = binding.sequence
                 display_name = f"{actor_name}\n({seq.get_name()})"
@@ -290,6 +300,9 @@ class UnrealSessionCollector(HookBaseClass):
             task_name = None
             if 'camera' in actor_name.lower():
                 task_name = 'Camera'
+                icon_path = os.path.join(self._icons_dir(), "camera.png")
+                actor_item.set_icon_from_path(icon_path)
+
             unreal.log(f"Determine SG Context items: SCENE: {scene}, SHOT: {shot}, PIPE_STEP: {step}, TASK_NAME: {task_name}")
             context = unreal_utils.create_shot_context(scene, shot, step, task_name)
             if context:
