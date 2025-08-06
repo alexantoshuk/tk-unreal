@@ -345,17 +345,6 @@ class UnrealActorPublishPlugin(HookBaseClass):
         # Add the Unreal asset name to the fields
         fields = {"name": actor_name}
 
-        # Add today's date to the fields
-        # date = datetime.date.today()
-        # fields["YYYY"] = date.year
-        # fields["MM"] = date.month
-        # fields["DD"] = date.day
-        # ctx = item.properties["ctx"]
-        # scene, shot, step = ctx
-        # fields['Sequence'] = scene
-        # fields['Shot'] = shot
-        # fields['Step'] = step
-        # published_name
         ctx = unreal_utils.ctx_from_context(item.context)
         if ctx:
             scene, shot, step = ctx
@@ -404,6 +393,13 @@ class UnrealActorPublishPlugin(HookBaseClass):
 
         # run the base class validation
         # return super(UnrealActorPublishPlugin, self).validate(settings, item)
+        binding = item.properties["binding"]
+        if binding:
+            if not unreal_utils.frame_range_sync(binding.sequence, item.context):
+                error_msg = "Invalid frame range. Abort publish process."
+                self.logger.error(error_msg)
+                raise Exception(error_msg)
+
         self.save_ui_settings(settings)
         return True
 

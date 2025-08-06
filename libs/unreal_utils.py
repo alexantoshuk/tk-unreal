@@ -4,9 +4,62 @@ import sys
 import glob
 import subprocess
 import shutil
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 SHOT_SEQUENCE_START = 1001
 PROJECT_ROOT = os.path.normpath(unreal.SystemLibrary.get_project_directory())
+
+
+def msg_box(title, text, buttons=QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel):
+    msg = QMessageBox()
+    msg.setIcon(QMessageBox.Icon.Warning)
+    msg.setWindowTitle(title)
+    msg.setText(text)
+    msg.setStandardButtons(buttons)
+    return msg.exec()  # QMessageBox.Ok, QMessageBox.Cancel
+
+
+def entity_field_values(name, default=None, context=None):
+    import sgtk
+    en = sgtk.platform.current_engine()
+    ctx = context if context else en.context
+    sg = en.shotgun
+
+    entity_type = ctx.entity['type']
+    entity_id = ctx.entity['id']
+
+    field_val = sg.find_one(
+        entity_type, [["id", "is", entity_id]], [name])
+    if field_val:
+        field_val = field_val.get(name, default)
+    if field_val is None:
+        return default
+    return field_val
+
+
+def frame_range_sync(seq, sgctx):
+    import sgtk
+    en = sgtk.platform.current_engine()
+    sg = en.shotgun
+    entity_type = ctx.entity['type']
+    entity_id = ctx.entity['id']
+    field_val = sg.find_one(
+        entity_type, [["id", "is", entity_id]], ['sg_edit_handles', 'sg_cut_in', 'sg_cut_out'])
+
+    sg_edit_handles = field_val.get('sg_edit_handles', 0)
+    sg_start = field_val.get('sg_edit_handles', 1) - sg_edit_handles
+    sg_end = field_val.get('sg_edit_handles', 120) + sg_edit_handles
+
+    cur_start = seq.get_playback_start()
+    cur_end = seq.get_playback_end()
+
+    result = True
+    if (cur_start, cur_end) != (sg_start, sg_end):
+        btn = msg_box("Invalid frame range",
+                      f"Puplished sequence frame range is: {cur_start}-{cur_end}\nBut SG frame range is: {sg_start}-{sg_end}",
+                      buttons=QMessageBox.StandardButton.Abort | QMessageBox.StandardButton.Ignore)
+        result = btn != QMessageBox.Abort
+    return result
 
 
 def update_status():
