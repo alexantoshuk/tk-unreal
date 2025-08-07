@@ -38,6 +38,12 @@ def entity_field_values(name, default=None, context=None):
 
 
 def frame_range_sync(seq, ctx):
+    def get_default(d, key, default):
+        val = d.get(key)
+        if val is None:
+            return default
+        return val
+
     import sgtk
     en = sgtk.platform.current_engine()
     sg = en.shotgun
@@ -46,9 +52,9 @@ def frame_range_sync(seq, ctx):
     field_val = sg.find_one(
         entity_type, [["id", "is", entity_id]], ['sg_edit_handles', 'sg_cut_in', 'sg_cut_out'])
 
-    sg_edit_handles = field_val.get('sg_edit_handles', 0)
-    sg_start = field_val.get('sg_cut_in', 1) - sg_edit_handles
-    sg_end = field_val.get('sg_cut_out', 120) + sg_edit_handles
+    sg_edit_handles = get_default(field_val, 'sg_edit_handles', 0)
+    sg_start = get_default(field_val, 'sg_cut_in', 1) - sg_edit_handles
+    sg_end = get_default(field_val, 'sg_cut_out', 120) + sg_edit_handles
 
     cur_start = seq.get_playback_start()
     cur_end = seq.get_playback_end() - 1
