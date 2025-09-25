@@ -349,10 +349,10 @@ def save_state_and_bake(bindings):
     bake_settings = unreal.BakingAnimationKeySettings(
         baking_key_settings=unreal.BakingKeySettings.ALL_FRAMES,
         frame_increment=1,
-        reduce_keys=True,
+        reduce_keys=False,
         start_frame=unreal.FrameNumber(start_frame),
         end_frame=unreal.FrameNumber(end_frame),
-        tolerance=0.0001)
+        tolerance=0.001)
 
     # active_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_current_level_sequence()
     focused_level_sequence = unreal.LevelSequenceEditorBlueprintLibrary.get_focused_level_sequence()
