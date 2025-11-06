@@ -389,7 +389,7 @@ class UnrealMoviePublishPlugin(HookBaseClass):
         if info:
             updated_at = info.get("updated_at")
             if os.path.getmtime(movie_path) < updated_at.timestamp():
-                accepted = False
+                checked = False
                 return {
                     "accepted": accepted,
                     "checked": checked
