@@ -815,6 +815,7 @@ def unreal_import_vdb(input_path, destination_path, destination_name, automated=
         section = track.add_section()
         section.set_start_frame_bounded(0)
         section.set_end_frame_bounded(0)
+        section.set_completion_mode(unreal.MovieSceneCompletionMode.KEEP_STATE)
         channel = section.get_all_channels()[0]
 
         channel.add_key(unreal.FrameNumber(start_frame), float(start_frame), interpolation=unreal.MovieSceneKeyInterpolation.LINEAR)
