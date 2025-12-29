@@ -620,6 +620,9 @@ def create_shot_context(scene, shot, step=None, task_name=None):
     import sgtk
     engine = sgtk.platform.current_engine()
 
+    if (not task_name) and (step == "LAY"):
+        task_name = "AnimLayout"
+
     ctx = engine.context
     shot = engine.shotgun.find_one("Shot", [
         ["project", "is", ctx.project],
