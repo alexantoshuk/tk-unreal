@@ -266,7 +266,7 @@ class UnrealActions(HookBaseClass):
         # Other entities fall back to Project
         if context.entity["type"] == "Shot":
             destination_template = self.sgtk.templates["unreal_loader_shot_path"]
-            destination_name_template = self.sgtk.templates["unreal_loader_shot_name"]
+            destination_name_template = self.sgtk.templates["Shot"]
         else:
             raise Exception("Can't determine context for loading camera '{name}'")
 
@@ -323,10 +323,10 @@ class UnrealActions(HookBaseClass):
             destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
         elif context.entity["type"] == "Asset":
             destination_template = self.sgtk.templates["unreal_loader_asset_path"]
-            destination_name_template = self.sgtk.templates["unreal_loader_asset_name"]
+            destination_name_template = self.sgtk.templates["Asset"]
         elif context.entity["type"] == "Shot":
             destination_template = self.sgtk.templates["unreal_loader_shot_path"]
-            destination_name_template = self.sgtk.templates["unreal_loader_shot_name"]
+            destination_name_template = self.sgtk.templates["Shot"]
         else:
             destination_template = self.sgtk.templates["unreal_loader_project_path"]
             destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
