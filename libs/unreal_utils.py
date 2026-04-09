@@ -166,7 +166,7 @@ def convert_mov_to_mp4(src, dst):
         dst,
     ]
 
-    if subprocess.run(commands).returncode == 0:
+    if subprocess.run(commands, stderr=None).returncode == 0:
         print("FFmpeg Script Ran Successfully")
         return True
     else:
