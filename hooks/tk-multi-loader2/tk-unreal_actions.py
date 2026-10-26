@@ -320,16 +320,16 @@ class UnrealActions(HookBaseClass):
         # Other entities fall back to Project
         if context.entity is None:
             destination_template = self.sgtk.templates["unreal_loader_project_path"]
-            destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
+            # destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
         elif context.entity["type"] == "Asset":
             destination_template = self.sgtk.templates["unreal_loader_asset_path"]
-            destination_name_template = self.sgtk.templates["Asset"]
+            # destination_name_template = self.sgtk.templates["Asset"]
         elif context.entity["type"] == "Shot":
             destination_template = self.sgtk.templates["unreal_loader_shot_path"]
-            destination_name_template = self.sgtk.templates["Shot"]
+            # destination_name_template = self.sgtk.templates["Shot"]
         else:
             destination_template = self.sgtk.templates["unreal_loader_project_path"]
-            destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
+            # destination_name_template = self.sgtk.templates["unreal_loader_project_name"]
 
         # Get the name field from the Publish Data
         name = sg_publish_data["name"]
@@ -355,10 +355,10 @@ class UnrealActions(HookBaseClass):
             destination_path = "/Game/Assets/"
 
         # Query the fields needed for the name template from the context
-        name_fields = context.as_template_fields(destination_name_template)
+        # name_fields = context.as_template_fields(destination_name_template)
 
         # Add the name field from the publish data
-        name_fields["name"] = name
+        # name_fields["name"] = name
 
         # Get destination name by applying fields to the name template
         # Fall back to the filename if unsuccessful
