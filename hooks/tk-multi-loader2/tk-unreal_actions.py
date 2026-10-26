@@ -266,7 +266,7 @@ class UnrealActions(HookBaseClass):
         # Other entities fall back to Project
         if context.entity["type"] == "Shot":
             destination_template = self.sgtk.templates["unreal_loader_shot_path"]
-            destination_name_template = self.sgtk.templates["Shot"]
+            # destination_name_template = self.sgtk.templates["Shot"]
         else:
             raise Exception("Can't determine context for loading camera '{name}'")
 
@@ -286,10 +286,10 @@ class UnrealActions(HookBaseClass):
         destination_path = destination_template.apply_fields(fields)
 
         # Query the fields needed for the name template from the context
-        name_fields = context.as_template_fields(destination_name_template)
+        # name_fields = context.as_template_fields(destination_name_template)
 
         # Add the name field from the publish data
-        name_fields["name"] = name
+        # name_fields["name"] = name
 
         # Get destination name by applying fields to the name template
         # Fall back to the filename if unsuccessful
